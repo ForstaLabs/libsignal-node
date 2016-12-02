@@ -1,3 +1,7 @@
+
+const curve25519 = require('../build/curve25519_concat.js');
+
+
 (function() {
     'use strict';
 
@@ -79,8 +83,8 @@
         };
     }
 
-    Internal.Curve       = wrapCurve25519(Internal.curve25519);
-    Internal.Curve.async = wrapCurve25519(Internal.curve25519_async);
+    exports.Curve       = wrapCurve25519(curve25519);
+    exports.Curve.async = wrapCurve25519(curve25519_async);
 
     function wrapCurve(curve) {
         return {
