@@ -1,17 +1,18 @@
 /* vim: ts=4:sw=4 */
-var Internal = Internal || {};
 
-Internal.protobuf = function() {
-    'use strict';
+'use strict';
 
-    function loadProtoBufs(filename) {
-        return dcodeIO.ProtoBuf.loadProto(Internal.protoText['protos/' + filename]).build('textsecure');
-    }
+const fs = require('fs');
+const ByteBuffer = require('bytebuffer');
+const ProtoBuf = require('node-protobuf')
 
-    var protocolMessages = loadProtoBufs('WhisperTextProtocol.proto');
+function loadProtoBufs(filename) {
+    return new ProtoBuf.loadProto(fs.readFileSync('../protos/' + filename));
+}
 
-    return {
-        WhisperMessage            : protocolMessages.WhisperMessage,
-        PreKeyWhisperMessage      : protocolMessages.PreKeyWhisperMessage
-    };
-}();
+var protocolMessages = loadProtoBufs('WhisperTextProtocol.proto');
+
+module.exports = {
+    WhisperMessage: protocolMessages.WhisperMessage,
+    PreKeyWhisperMessage: protocolMessages.PreKeyWhisperMessage
+};

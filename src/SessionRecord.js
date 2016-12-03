@@ -2,21 +2,12 @@
  * vim: ts=4:sw=4
  */
 
-var Internal = Internal || {};
+'use strict';
 
-Internal.BaseKeyType = {
-  OURS: 1,
-  THEIRS: 2
-};
-Internal.ChainType = {
-  SENDING: 1,
-  RECEIVING: 2
-};
+const BaseKeyType = require('./BaseKeyType.js');
+const ARCHIVED_STATES_MAX_LENGTH = 40;
 
-var ARCHIVED_STATES_MAX_LENGTH = 40;
-
-Internal.SessionRecord = function() {
-    'use strict';
+const SessionRecord = (function() {
     var MESSAGE_LOST_THRESHOLD_MS = 1000*60*60*24*7;
 
     var StaticByteBufferProto = new dcodeIO.ByteBuffer().__proto__;
@@ -75,7 +66,10 @@ Internal.SessionRecord = function() {
         var data = JSON.parse(serialized);
         var record = new SessionRecord(data.identityKey, data.registrationId);
         record._sessions = data.sessions;
-        if (record._sessions === undefined || record._sessions === null || typeof record._sessions !== "object" || Array.isArray(record._sessions)) {
+        if (record._sessions === undefined || 
+            record._sessions === null || 
+            typeof record._sessions !== "object" || 
+            Array.isArray(record._sessions)) {
             throw new Error("Error deserializing SessionRecord");
         }
         if (record.identityKey === undefined || record.registrationId === undefined) {
@@ -98,7 +92,7 @@ Internal.SessionRecord = function() {
 
         getSessionByBaseKey: function(baseKey) {
             var session = this._sessions[util.toString(baseKey)];
-            if (session && session.indexInfo.baseKeyType === Internal.BaseKeyType.OURS) {
+            if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
                 console.log("Tried to lookup a session using our basekey");
                 return undefined;
             }
@@ -272,4 +266,6 @@ Internal.SessionRecord = function() {
     };
 
     return SessionRecord;
-}();
+})();
+
+module.exports = SessionRecord;

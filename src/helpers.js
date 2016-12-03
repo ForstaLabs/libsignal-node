@@ -2,6 +2,8 @@
  * vim: ts=4:sw=4
  */
 
+var ByteBuffer = require("bytebuffer");
+
 var util = (function() {
     'use strict';
 
@@ -12,7 +14,7 @@ var util = (function() {
             if (typeof thing == 'string') {
                 return thing;
             }
-            return new dcodeIO.ByteBuffer.wrap(thing).toString('binary');
+            return new ByteBuffer.wrap(thing).toString('binary');
         },
         toArrayBuffer: function(thing) {
             if (thing === undefined) {
@@ -30,7 +32,7 @@ var util = (function() {
             } else {
                 throw new Error("Tried to convert a non-string of type " + typeof thing + " to an array buffer");
             }
-            return new dcodeIO.ByteBuffer.wrap(thing, 'binary').toArrayBuffer();
+            return new ByteBuffer.wrap(thing, 'binary').toArrayBuffer();
         },
         isEqual: function(a, b) {
             // TODO: Special-case arraybuffers, etc
