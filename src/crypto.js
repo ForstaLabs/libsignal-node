@@ -61,7 +61,7 @@ function HKDF(input, salt, info) {
     });
 }
 
-verifyMAC: function(data, key, mac, length) {
+function verifyMAC(data, key, mac, length) {
     return sign(key, data).then(function(calculated_mac) {
         if (mac.byteLength != length  || calculated_mac.byteLength < length) {
             throw new Error("Bad MAC length");

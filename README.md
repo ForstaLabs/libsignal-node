@@ -1,15 +1,12 @@
 #libsignal-protocol-javascript
 
-Signal Protocol implementation for the browser based on
+Signal Protocol implementation for nodejs based on
 [libsignal-protocol-java](https://github.com/WhisperSystems/libsignal-protocol-java).
 
 ```
-/dist       # Distributables
-/build      # Intermediate build files
 /src        # JS source files
 /native     # C source files for curve25519
 /protos     # Protobuf definitions
-/test       # Tests
 ```
 
 ## Overview
@@ -67,10 +64,6 @@ types/interfaces, which are available in most modern browsers.
 * [WebCrypto](https://developer.mozilla.org/en-US/docs/Web/API/Crypto) with support for:
   - AES-CBC
   - HMAC SHA-256
-
-## Usage
-
-Include `dist/libsignal-protocol.js` in your webpage.
 
 ### Install time
 
