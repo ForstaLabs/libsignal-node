@@ -80,7 +80,7 @@ function verifyMAC(data, key, mac, length) {
     });
 }
 
-modules.exports = {
+module.exports = {
     encrypt,
     decrypt,
     sign,
