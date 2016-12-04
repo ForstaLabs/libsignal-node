@@ -5,12 +5,13 @@
 'use strict';
 
 const BaseKeyType = require('./BaseKeyType.js');
+const ByteBuffer = require('bytebuffer');
 const ARCHIVED_STATES_MAX_LENGTH = 40;
 
 const SessionRecord = (function() {
     var MESSAGE_LOST_THRESHOLD_MS = 1000*60*60*24*7;
 
-    var StaticByteBufferProto = new dcodeIO.ByteBuffer().__proto__;
+    var StaticByteBufferProto = new ByteBuffer().__proto__;
     var StaticArrayBufferProto = new ArrayBuffer().__proto__;
     var StaticUint8ArrayProto = new Uint8Array().__proto__;
 
