@@ -4,8 +4,10 @@
 
 'use strict';
 
+const ByteBuffer = require('bytebuffer');
+const node_crypto = require('crypto');
 const subtle = require('subtle');
-const curve = require('./Curve.js');
+const curve = require('./curve.js');
 
 function encrypt(key, data, iv) {
     return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
@@ -41,7 +43,7 @@ function HKDF(input, salt, info) {
         throw new Error("Got salt of incorrect length");
     }
     //info = util.toArrayBuffer(info));
-    debugger; // figure that out
+    throw new Error("figure this out");
     return sign(salt, input).then(function(PRK) {
         var infoBuffer = new ArrayBuffer(info.byteLength + 1 + 32);
         var infoArray = new Uint8Array(infoBuffer);
@@ -73,33 +75,44 @@ function verifyMAC(data, key, mac, length) {
             result = result | (a[i] ^ b[i]);
         }
         if (result !== 0) {
-            console.log('Our MAC  ', dcodeIO.ByteBuffer.wrap(calculated_mac).toHex());
-            console.log('Their MAC', dcodeIO.ByteBuffer.wrap(mac).toHex());
+            console.log('Our MAC  ', ByteBuffer.wrap(calculated_mac).toHex());
+            console.log('Their MAC', ByteBuffer.wrap(mac).toHex());
             throw new Error("Bad MAC");
         }
     });
 }
 
-module.exports = {
-    encrypt,
-    decrypt,
-    sign,
-    hash,
-    HKDF,
-    verifyMAC
-};
+function getRandomBytes(len) {
+    //return ByteBuffer.wrap(node_crypto.randomBytes(len));
+    return node_crypto.randomBytes(len).buffer;
+}
 
-/*
-createKeyPair_DEPRECATED: function(privKey) {
+function createKeyPair(privKey) {
     if (privKey === undefined) {
-        privKey = crypto.randomBytes(32);
+        privKey = getRandomBytes(32);
     }
     return curve.async.createKeyPair(privKey);
-},
-ECDHE_DEPRECATED: function(pubKey, privKey) {
+}
+
+function ECDHE(pubKey, privKey) {
     return curve.async.ECDHE(pubKey, privKey);
-},
-Ed25519Sign_DEPRECATED: function(privKey, message) {
+}
+
+function Ed25519Sign(privKey, message) {
     return curve.async.Ed25519Sign(privKey, message);
 }
-*/
+
+module.exports = {
+    ECDHE,
+    Ed25519Sign,
+    HKDF,
+    createKeyPair,
+    decrypt,
+    encrypt,
+    getRandomBytes,
+    hash,
+    sign,
+    verifyMAC,
+};
+
+

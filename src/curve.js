@@ -1,12 +1,20 @@
 
-const curve25519 = require('../src/curve25519_wrapper.js');
-const crypto = require('./crypto.js');
-
 'use strict';
 
+const curve25519 = require('../src/curve25519_wrapper.js');
+const ByteBuffer = require('bytebuffer');
+
+
 function validatePrivKey(privKey) {
-    if (privKey === undefined || !(privKey instanceof ArrayBuffer) || privKey.byteLength != 32) {
-        throw new Error("Invalid private key");
+    if (privKey === undefined) {
+        throw new Error("Undefined private key");
+    }
+    if (!(privKey instanceof ArrayBuffer)) {
+        throw new Error(`Invalid private key type: ${privKey.constructor.name}`);
+    }
+    if (privKey.byteLength != 32) {
+        console.log(privKey);
+        throw new Error(`Incorrect private key length: ${privKey.byteLength}`);
     }
 }
 
@@ -89,7 +97,7 @@ Curve.async = wrapCurve25519(curve25519.async);
 function wrapCurve(curve) {
     return {
         generateKeyPair: function() {
-            var privKey = crypto.getRandomBytes(32);
+            var privKey = require('./crypto.js').getRandomBytes(32);
             return curve.createKeyPair(privKey);
         },
         createKeyPair: function(privKey) {
