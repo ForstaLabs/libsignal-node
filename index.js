@@ -8,7 +8,8 @@
 //const SessionLock = require('./src/SessionLock.js');
 //const NumericFingerprint = require('./src/NumericFingerprint.js');
 exports.crypto = require('./src/crypto.js');
-exports.KeyHelper = require('./src/KeyHelper.js');
-exports.SignalProtocolAddress = require('./src/SignalProtocolAddress.js');
-exports.SessionBuilder = require('./src/SessionBuilder.js');
-exports.SessionCipher = require('./src/SessionCipher.js');
+exports.curve = require('./src/curve.js');
+exports.KeyHelper = require('./src/key_helper.js');
+exports.SignalProtocolAddress = require('./src/signal_protocol_address.js');
+exports.SessionBuilder = require('./src/session_builder.js');
+exports.SessionCipher = require('./src/session_cipher.js');

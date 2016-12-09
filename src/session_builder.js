@@ -1,7 +1,7 @@
 
-const SessionLock = require('./SessionLock.js');
-const BaseKeyType = require('./BaseKeyType.js');
-const ChainType = require('./ChainType.js');
+const SessionLock = require('./session_lock.js');
+const BaseKeyType = require('./base_key_type.js');
+const ChainType = require('./chain_type.js');
 const crypto = require('./crypto.js');
 
 function SessionBuilder(storage, remoteAddress) {

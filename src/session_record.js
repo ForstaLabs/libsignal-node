@@ -4,7 +4,7 @@
 
 'use strict';
 
-const BaseKeyType = require('./BaseKeyType.js');
+const BaseKeyType = require('./base_key_type.js');
 const ByteBuffer = require('bytebuffer');
 const ARCHIVED_STATES_MAX_LENGTH = 40;
 

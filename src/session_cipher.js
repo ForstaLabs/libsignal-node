@@ -1,9 +1,9 @@
 
 const crypto = require('./crypto.js');
 const ByteBuffer = require('bytebuffer');
-const SessionLock = require('./SessionLock.js');
-const SessionRecord = require('./SessionRecord.js');
-const ChainType = require('./ChainType.js');
+const SessionLock = require('./session_lock.js');
+const SessionRecord = require('./session_record.js');
+const ChainType = require('./chain_type.js');
 const protobufs = require('./protobufs.js');
 
 function SessionCipher(storage, remoteAddress) {
