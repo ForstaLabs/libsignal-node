@@ -1,12 +1,12 @@
 {
-  "name": "libsignal-protocol",
-  "repository": "https://github.com/forstaathletics/libsignal-protocol-node.git",
-  "version": "1.1.2",
-  "license": "GPL-3.0",
-  "dependencies": {
-    "bytebuffer": "3.5.5",
-    "long": "3.1.0",
-    "protobufjs": "5.0.1",
-    "subtle": "0.1.8"
-  }
+    "name": "libsignal",
+    "repository": "https://github.com/forstaathletics/libsignal-node.git",
+    "version": "0.0.1",
+    "license": "GPL-3.0",
+    "dependencies": {
+        "bytebuffer": "3.5.5",
+        "long": "3.1.0",
+        "protobufjs": "5.0.1",
+        "subtle": "0.1.8"
+    }
 }
