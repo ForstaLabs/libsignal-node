@@ -8,9 +8,9 @@ function loadProtoBufs(filename) {
     return b.build('textsecure');
 }
 
-var protocolMessages = loadProtoBufs('WhisperTextProtocol.proto');
+const p = loadProtoBufs('WhisperTextProtocol.proto');
 
 module.exports = {
-    WhisperMessage: protocolMessages.WhisperMessage,
-    PreKeyWhisperMessage: protocolMessages.PreKeyWhisperMessage
+    WhisperMessage: p.WhisperMessage,
+    PreKeyWhisperMessage: p.PreKeyWhisperMessage
 };

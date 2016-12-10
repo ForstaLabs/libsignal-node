@@ -30,7 +30,7 @@ var KeyHelper = {
         }
 
         return crypto.createKeyPair().then(function(keyPair) {
-            return crypto.Ed25519Sign(identityKeyPair.privKey, keyPair.pubKey).then(function(sig) {
+            return crypto.calculateSignature(identityKeyPair.privKey, keyPair.pubKey).then(function(sig) {
                 return {
                     keyId      : signedKeyId,
                     keyPair    : keyPair,

@@ -94,21 +94,25 @@ function createKeyPair(privKey) {
     return curve.async.createKeyPair(privKey);
 }
 
-function ECDHE(pubKey, privKey) {
-    return curve.async.ECDHE(pubKey, privKey);
+function calculateAgreement(pubKey, privKey) {
+    return curve.async.calculateAgreement(pubKey, privKey);
 }
 
-function Ed25519Sign(privKey, message) {
-    return curve.async.Ed25519Sign(privKey, message);
+function calculateSignature(privKey, message) {
+    return curve.async.calculateSignature(privKey, message);
+}
+
+function generateKeyPair(privKey, message) {
+    return curve.async.generateKeyPair(privKey, message);
 }
 
 module.exports = {
-    ECDHE,
-    Ed25519Sign,
     HKDF,
+    calculateAgreement,
     createKeyPair,
     decrypt,
     encrypt,
+    generateKeyPair,
     getRandomBytes,
     hash,
     sign,

@@ -143,9 +143,9 @@ SessionBuilder.prototype = {
         }
 
         return Promise.all([
-            crypto.ECDHE(theirSignedPubKey, ourIdentityKey.privKey),
-            crypto.ECDHE(theirIdentityPubKey, ourSignedKey.privKey),
-            crypto.ECDHE(theirSignedPubKey, ourSignedKey.privKey)
+            crypto.calculateAgreement(theirSignedPubKey, ourIdentityKey.privKey),
+            crypto.calculateAgreement(theirIdentityPubKey, ourSignedKey.privKey),
+            crypto.calculateAgreement(theirSignedPubKey, ourSignedKey.privKey)
         ]).then(function(ecRes) {
             if (isInitiator) {
                 sharedSecret.set(new Uint8Array(ecRes[0]), 32);
@@ -157,7 +157,7 @@ SessionBuilder.prototype = {
             sharedSecret.set(new Uint8Array(ecRes[2]), 32 * 3);
 
             if (ourEphemeralKey !== undefined && theirEphemeralPubKey !== undefined) {
-                return crypto.ECDHE(
+                return crypto.calculateAgreement(
                     theirEphemeralPubKey, ourEphemeralKey.privKey
                 ).then(function(ecRes4) {
                     sharedSecret.set(new Uint8Array(ecRes4), 32 * 4);
@@ -203,7 +203,7 @@ SessionBuilder.prototype = {
   calculateSendingRatchet: function(session, remoteKey) {
       var ratchet = session.currentRatchet;
 
-      return crypto.ECDHE(
+      return crypto.calculateAgreement(
           remoteKey, util.toArrayBuffer(ratchet.ephemeralKeyPair.privKey)
       ).then(function(sharedSecret) {
             // XXX
