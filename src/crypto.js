@@ -109,6 +109,7 @@ function generateKeyPair(privKey, message) {
 module.exports = {
     HKDF,
     calculateAgreement,
+    calculateSignature,
     createKeyPair,
     decrypt,
     encrypt,
