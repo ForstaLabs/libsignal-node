@@ -17,10 +17,15 @@ function encrypt(key, data, iv) {
 }
 
 function decrypt(key, data, iv) {
-    return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
-                            ['decrypt']).then(function(key) {
-        return subtle.decrypt({name: 'AES-CBC', iv: new Uint8Array(iv)}, key, data);
-    });
+    const decipher = node_crypto.createDecipheriv('aes-256-cbc',
+                                                  Buffer.from(key),
+                                                  Buffer.from(iv));
+    var dec = Buffer.concat([decipher.update(Buffer.from(data)) , decipher.final()]);
+    return dec;
+    //return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
+     //                       ['decrypt']).then(function(key) {
+      //  return subtle.decrypt({name: 'AES-CBC', iv: new Uint8Array(iv)}, key, data);
+    //});
 }
 
 function sign(key, data) {

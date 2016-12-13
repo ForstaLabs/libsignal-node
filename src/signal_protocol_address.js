@@ -32,7 +32,7 @@ _SignalProtocolAddress.fromString = function(encodedAddress) {
     throw new Error('Invalid SignalProtocolAddress string');
   }
   var parts = encodedAddress.split('.');
-  return new libsignal.SignalProtocolAddress(parts[0], parseInt(parts[1]));
+  return new _SignalProtocolAddress(parts[0], parseInt(parts[1]));
 };
 
 module.exports = _SignalProtocolAddress;

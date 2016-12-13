@@ -4,9 +4,11 @@
 
 'use strict';
 
+const ARCHIVED_STATES_MAX_LENGTH = 40;
 const BaseKeyType = require('./base_key_type.js');
 const ByteBuffer = require('bytebuffer');
-const ARCHIVED_STATES_MAX_LENGTH = 40;
+const helpers = require('./helpers.js');
+
 
 const SessionRecord = (function() {
     var MESSAGE_LOST_THRESHOLD_MS = 1000*60*60*24*7;
@@ -25,7 +27,7 @@ const SessionRecord = (function() {
         if (typeof thing == "string" || typeof thing == "number" || typeof thing == "boolean") {
             return thing;
         } else if (isStringable(thing)) {
-            return util.toString(thing);
+            return helpers.toString(thing);
         } else if (thing instanceof Array) {
             var array = [];
             for (var i = 0; i < thing.length; i++) {
@@ -51,7 +53,7 @@ const SessionRecord = (function() {
 
     var SessionRecord = function(identityKey, registrationId) {
         this._sessions = {};
-        identityKey = util.toString(identityKey);
+        identityKey = helpers.toString(identityKey);
         if (typeof identityKey !== 'string') {
             throw new Error('SessionRecord: Invalid identityKey');
         }
@@ -92,7 +94,7 @@ const SessionRecord = (function() {
         },
 
         getSessionByBaseKey: function(baseKey) {
-            var session = this._sessions[util.toString(baseKey)];
+            var session = this._sessions[baseKey.toString('binary')];
             if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
                 console.log("Tried to lookup a session using our basekey");
                 return undefined;
@@ -103,7 +105,7 @@ const SessionRecord = (function() {
             this.detectDuplicateOpenSessions();
             var sessions = this._sessions;
 
-            var searchKey = util.toString(remoteEphemeralKey);
+            var searchKey = helpers.toString(remoteEphemeralKey);
 
             var openSession;
             for (var key in sessions) {
@@ -155,13 +157,13 @@ const SessionRecord = (function() {
             if (this.identityKey === null) {
                 this.identityKey = session.indexInfo.remoteIdentityKey;
             }
-            if (util.toString(this.identityKey) !== util.toString(session.indexInfo.remoteIdentityKey)) {
+            if (helpers.toString(this.identityKey) !== helpers.toString(session.indexInfo.remoteIdentityKey)) {
                 var e = new Error("Identity key changed at session save time");
                 e.identityKey = session.indexInfo.remoteIdentityKey.toArrayBuffer();
                 throw e;
             }
 
-            sessions[util.toString(session.indexInfo.baseKey)] = session;
+            sessions[helpers.toString(session.indexInfo.baseKey)] = session;
 
             this.removeOldSessions();
 
@@ -217,7 +219,7 @@ const SessionRecord = (function() {
             // but we cannot send messages or step the ratchet
 
             // Delete current sending ratchet
-            delete session[util.toString(session.currentRatchet.ephemeralKeyPair.pubKey)];
+            delete session[helpers.toString(session.currentRatchet.ephemeralKeyPair.pubKey)];
             // Move all receive ratchets to the oldRatchetList to mark them for deletion
             for (var i in session) {
                 if (session[i].chainKey !== undefined && session[i].chainKey.key !== undefined) {
@@ -243,7 +245,7 @@ const SessionRecord = (function() {
                     }
                 }
                 console.log("Deleting chain closed at", oldest.added);
-                delete session[util.toString(oldest.ephemeralKey)];
+                delete session[helpers.toString(oldest.ephemeralKey)];
                 session.oldRatchetList.splice(index, 1);
             }
         },
@@ -261,7 +263,7 @@ const SessionRecord = (function() {
                     }
                 }
                 console.log("Deleting session closed at", oldestSession.indexInfo.closed);
-                delete sessions[util.toString(oldestBaseKey)];
+                delete sessions[helpers.toString(oldestBaseKey)];
             }
         },
     };
