@@ -3,6 +3,7 @@
 
 const curve25519 = require('../src/curve25519_wrapper.js');
 const ByteBuffer = require('bytebuffer');
+const crypto = require('./crypto.js');
 
 
 function validatePrivKey(privKey) {
@@ -97,8 +98,7 @@ Curve.async = wrapCurve25519(curve25519.async);
 function wrapCurve(curve) {
     return {
         generateKeyPair: function() {
-            // XXX check to see if we can move up (circular refs and all)
-            var privKey = require('./crypto.js').getRandomBytes(32);
+            var privKey = crypto.getRandomBytes(32);
             return curve.createKeyPair(privKey);
         },
         createKeyPair: function(privKey) {

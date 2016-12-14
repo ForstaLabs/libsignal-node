@@ -10,46 +10,22 @@ const ByteBuffer = require('bytebuffer');
 const helpers = require('./helpers.js');
 
 
+function array_buffer_encode(value) {
+    if (!(value instanceof ArrayBuffer)) {
+        throw new Error(`Invalid type for: ${value}`);
+    }
+    const buf = new Buffer(new Uint8Array(value));
+    return buf.toString('binary');
+}
+
+function array_buffer_decode(raw) {
+    const buf = new Buffer(raw, 'binary');
+    return (new Uint8Array(buf)).buffer;
+}
+
+
 const SessionRecord = (function() {
     var MESSAGE_LOST_THRESHOLD_MS = 1000*60*60*24*7;
-
-    var StaticByteBufferProto = new ByteBuffer().__proto__;
-    var StaticArrayBufferProto = new ArrayBuffer().__proto__;
-    var StaticUint8ArrayProto = new Uint8Array().__proto__;
-
-    function isStringable(thing) {
-        return (thing === Object(thing) &&
-                (thing.__proto__ == StaticArrayBufferProto ||
-                    thing.__proto__ == StaticUint8ArrayProto ||
-                    thing.__proto__ == StaticByteBufferProto));
-    }
-    function ensureStringed(thing) {
-        if (typeof thing == "string" || typeof thing == "number" || typeof thing == "boolean") {
-            return thing;
-        } else if (isStringable(thing)) {
-            return helpers.toString(thing);
-        } else if (thing instanceof Array) {
-            var array = [];
-            for (var i = 0; i < thing.length; i++) {
-                array[i] = ensureStringed(thing[i]);
-            }
-            return array;
-        } else if (thing === Object(thing)) {
-            var obj = {};
-            for (var key in thing) {
-                obj[key] = ensureStringed(thing[key]);
-            }
-            return obj;
-        } else if (thing === null) {
-            return null;
-        } else {
-            throw new Error("unsure of how to jsonify object of type " + typeof thing);
-        }
-    }
-
-    function jsonThing(thing) {
-        return JSON.stringify(ensureStringed(thing)); //TODO: jquery???
-    }
 
     var SessionRecord = function(identityKey, registrationId) {
         this._sessions = {};
@@ -65,36 +41,46 @@ const SessionRecord = (function() {
         }
     };
 
-    SessionRecord.deserialize = function(serialized) {
-        var data = JSON.parse(serialized);
+    SessionRecord.deserialize = function(data) {
+        data.identityKey = new Buffer(data.identityKey, 'binary');
+        for (const x of Object.keys(data.sessions)) {
+            let s = data.sessions[x];
+            let cr = s.currentRatchet;
+            cr.rootKey = new Buffer(cr.rootKey, 'binary');
+            cr.lastRemoteEphemeralKey = array_buffer_decode(cr.lastRemoteEphemeralKey);
+            s.indexInfo.remoteIdentityKey = array_buffer_decode(s.indexInfo.remoteIdentityKey);
+        }
         var record = new SessionRecord(data.identityKey, data.registrationId);
         record._sessions = data.sessions;
-        if (record._sessions === undefined || 
-            record._sessions === null || 
-            typeof record._sessions !== "object" || 
-            Array.isArray(record._sessions)) {
-            throw new Error("Error deserializing SessionRecord");
-        }
-        if (record.identityKey === undefined || record.registrationId === undefined) {
-            throw new Error("Error deserializing SessionRecord");
-        }
         return record;
     };
 
     SessionRecord.prototype = {
         serialize: function() {
-            return jsonThing({
-                sessions       : this._sessions,
-                registrationId : this.registrationId,
-                identityKey    : this.identityKey
-            });
+            const sessions = Object.keys(this._sessions).map(function(x) {
+                let src = this._sessions[x];
+                let dst = JSON.parse(JSON.stringify(src)); // deep copy
+                let cr = src.currentRatchet;
+                let ekp = cr.ephemeralKeyPair;
+                dst.currentRatchet.rootKey = cr.rootKey.toString('binary');
+                dst.currentRatchet.lastRemoteEphemeralKey = array_buffer_encode(cr.lastRemoteEphemeralKey);
+                dst.currentRatchet.ephemeralKeyPair.pubKey = array_buffer_encode(ekp.pubKey);
+                dst.currentRatchet.ephemeralKeyPair.privKey = array_buffer_encode(ekp.privKey);
+                dst.indexInfo.remoteIdentityKey = array_buffer_encode(src.indexInfo.remoteIdentityKey);
+                return dst;
+            }.bind(this));
+            return {
+                sessions,
+                registrationId: this.registrationId,
+                identityKey: this.identityKey.toString('binary')
+            };
         },
         haveOpenSession: function() {
             return this.registrationId !== null;
         },
 
         getSessionByBaseKey: function(baseKey) {
-            var session = this._sessions[baseKey.toString('binary')];
+            var session = this._sessions[helpers.toString(baseKey)];
             if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
                 console.log("Tried to lookup a session using our basekey");
                 return undefined;

@@ -11,12 +11,19 @@ function toString(thing) {
     if (typeof thing == 'string') {
         return thing;
     }
-    return ByteBuffer.wrap(thing).toString('binary');
+    if (thing instanceof ByteBuffer || thing.__proto__.__isByteBuffer__) {
+        return thing.toString('binary');
+    } else {
+        return ByteBuffer.wrap(thing).toString('binary');
+    }
 }
 
 function toArrayBuffer(thing) {
     if (thing === undefined) {
         return undefined;
+    }
+    if (thing instanceof Buffer) {
+        return (new Uint8Array(thing)).buffer;
     }
     if (thing === Object(thing)) {
         if (thing.__proto__ == StaticArrayBufferProto) {

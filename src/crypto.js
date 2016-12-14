@@ -5,9 +5,10 @@
 'use strict';
 
 const ByteBuffer = require('bytebuffer');
+const curve = require('./curve.js');
+const helpers = require('./helpers.js');
 const node_crypto = require('crypto');
 const subtle = require('subtle');
-const curve = require('./curve.js');
 
 function encrypt(key, data, iv) {
     return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
@@ -41,14 +42,14 @@ function hash(data) {
 
 // HKDF for TextSecure has a bit of additional handling.
 // Salts always end up being 32 bytes
-function HKDF(input, salt, info) {
+function HKDF(input, salt, plaininfo) {
     // Specific implementation of RFC 5869 that only returns the first 3 32-byte chunks
     // TODO: We dont always need the third chunk, we might skip it
     if (salt.byteLength != 32) {
         throw new Error("Got salt of incorrect length");
     }
-    //info = util.toArrayBuffer(info));
-    throw new Error("figure this out");
+    const info = helpers.toArrayBuffer(plaininfo);
+    console.log('INTO THE BREACH!', info, plaininfo);
     return sign(salt, input).then(function(PRK) {
         var infoBuffer = new ArrayBuffer(info.byteLength + 1 + 32);
         var infoArray = new Uint8Array(infoBuffer);
