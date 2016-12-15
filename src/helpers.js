@@ -3,11 +3,12 @@
  */
 'use strict';
 
-var ByteBuffer = require("bytebuffer");
 const StaticArrayBufferProto = new ArrayBuffer().__proto__;
 
 
 function toString(thing) {
+    debugger;
+    throw new Error("just do it already");
     if (typeof thing == 'string') {
         return thing;
     }
@@ -19,6 +20,8 @@ function toString(thing) {
 }
 
 function toArrayBuffer(thing) {
+    debugger;
+    throw new Error("Be a big boy ");
     if (thing === undefined) {
         return undefined;
     }

@@ -2,25 +2,23 @@
 'use strict';
 
 const curve25519 = require('../src/curve25519_wrapper.js');
-const ByteBuffer = require('bytebuffer');
-const crypto = require('./crypto.js');
+const node_crypto = require('crypto');
 
 
 function validatePrivKey(privKey) {
     if (privKey === undefined) {
         throw new Error("Undefined private key");
     }
-    if (!(privKey instanceof ArrayBuffer)) {
+    if (!(privKey instanceof Buffer)) {
         throw new Error(`Invalid private key type: ${privKey.constructor.name}`);
     }
     if (privKey.byteLength != 32) {
-        console.log(privKey);
         throw new Error(`Incorrect private key length: ${privKey.byteLength}`);
     }
 }
 
 function validatePubKeyFormat(pubKey) {
-    if (pubKey === undefined || ((pubKey.byteLength != 33 || new Uint8Array(pubKey)[0] != 5) && pubKey.byteLength != 32)) {
+    if (pubKey === undefined || ((pubKey.byteLength != 33 || pubKey[0] != 5) && pubKey.byteLength != 32)) {
         throw new Error("Invalid public key");
     }
     if (pubKey.byteLength == 33) {
@@ -37,8 +35,10 @@ function processKeys(raw_keys) {
     var pub = new Uint8Array(33);
     pub.set(origPub, 1);
     pub[0] = 5;
-
-    return { pubKey: pub.buffer, privKey: raw_keys.privKey };
+    return {
+        pubKey: Buffer.from(pub),
+        privKey: Buffer.from(raw_keys.privKey)
+    };
 }
 
 function wrapCurve25519(curve) {
@@ -98,7 +98,7 @@ Curve.async = wrapCurve25519(curve25519.async);
 function wrapCurve(curve) {
     return {
         generateKeyPair: function() {
-            var privKey = crypto.getRandomBytes(32);
+            var privKey = node_crypto.randomBytes(32);
             return curve.createKeyPair(privKey);
         },
         createKeyPair: function(privKey) {

@@ -1,5 +1,4 @@
 
-const ByteBuffer = require('bytebuffer');
 const ChainType = require('./chain_type.js');
 const SessionBuilder = require('./session_builder.js');
 const SessionLock = require('./session_lock.js');
@@ -15,6 +14,7 @@ function SessionCipher(storage, remoteAddress) {
 }
 
 SessionCipher.prototype = {
+
   getRecord: function(encodedNumber) {
       return this.storage.loadSession(encodedNumber).then(function(serialized) {
           if (serialized === undefined) {
@@ -23,8 +23,12 @@ SessionCipher.prototype = {
           return SessionRecord.deserialize(serialized);
       });
   },
+
   encrypt: function(buffer, encoding) {
-    buffer = ByteBuffer.wrap(buffer, encoding).toArrayBuffer();
+    console.warn(buffer, encoding);
+    throw new Error(buffer);
+    //buffer = ByteBuffer.wrap(buffer, encoding).toArrayBuffer();
+    buffer = (new Uint8Array(Buffer.from(buffer, encoding))).buffer;
     return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
       if (!(buffer instanceof ArrayBuffer)) {
           throw new Error("Expected buffer to be an ArrayBuffer");
@@ -122,6 +126,7 @@ SessionCipher.prototype = {
       });
     }.bind(this));
   },
+
   decryptWithSessionList: function(buffer, sessionList, errors) {
     // Iterate recursively through the list, attempting to decrypt
     // using each one at a time. Stop and return the result if we get
@@ -138,8 +143,10 @@ SessionCipher.prototype = {
         return this.decryptWithSessionList(buffer, sessionList, errors);
     }.bind(this));
   },
+
   decryptWhisperMessage: function(buffer, encoding) {
-      buffer = ByteBuffer.wrap(buffer, encoding).toArrayBuffer();
+      console.warn(buffer, encoding);
+      buffer = (new Uint8Array(Buffer.from(buffer, encoding))).buffer;
       return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
         var address = this.remoteAddress.toString();
         return this.getRecord(address).then(function(record) {
@@ -158,49 +165,56 @@ SessionCipher.prototype = {
         }.bind(this));
       }.bind(this));
   },
+
   decryptPreKeyWhisperMessage: function(buffer, encoding) {
-      //buffer = ByteBuffer.wrap(buffer.buffer, encoding);
-      var version = buffer.readUint8();
-      if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
-          throw new Error("Incompatible version number on PreKeyWhisperMessage");
-      }
-      return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
-          var address = this.remoteAddress.toString();
-          return this.getRecord(address).then(function(record) {
-              var preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
-              if (!record) {
-                  if (preKeyProto.registrationId === undefined) {
-                      throw new Error("No registrationId");
-                  }
-                  record = new SessionRecord(
-                      preKeyProto.identityKey.toString('binary'),
-                      preKeyProto.registrationId
-                  );
-              }
-              var builder = new SessionBuilder(this.storage, this.remoteAddress);
-              return builder.processV3(record, preKeyProto).then(function(preKeyId) {
-                  var session = record.getSessionByBaseKey(preKeyProto.baseKey);
-                  return this.doDecryptWhisperMessage(
-                      preKeyProto.message.toArrayBuffer(), session
-                  ).then(function(plaintext) {
-                      record.updateSessionState(session);
-                      return this.storage.storeSession(address, record.serialize()).then(function() {
-                          if (preKeyId !== undefined) {
-                              return this.storage.removePreKey(preKeyId);
-                          }
-                      }.bind(this)).then(function() {
-                          return plaintext;
-                      });
-                  }.bind(this));
-              }.bind(this));
-          }.bind(this));
-      }.bind(this));
-  },
-  doDecryptWhisperMessage: function(messageBytes, session) {
-    if (!messageBytes instanceof ArrayBuffer) {
-        throw new Error("Expected messageBytes to be an ArrayBuffer");
+    if (encoding !== undefined) {
+       throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
     }
-    var version = (new Uint8Array(messageBytes))[0];
+    if (!(buffer instanceof Buffer)) {
+       throw new Error("Buffer type type required");
+    }
+    var version = buffer[0];
+    if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
+      throw new Error("Incompatible version number on PreKeyWhisperMessage");
+    }
+    return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
+        var address = this.remoteAddress.toString();
+        return this.getRecord(address).then(function(record) {
+            
+            var preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
+            if (!record) {
+                if (preKeyProto.registrationId === undefined) {
+                    throw new Error("No registrationId");
+                }
+                record = new SessionRecord(
+                    preKeyProto.identityKey.toString('binary'),
+                    preKeyProto.registrationId
+                );
+            }
+            var builder = new SessionBuilder(this.storage, this.remoteAddress);
+            return builder.processV3(record, preKeyProto).then(function(preKeyId) {
+                var session = record.getSessionByBaseKey(preKeyProto.baseKey);
+                return this.doDecryptWhisperMessage(preKeyProto.message, session
+                ).then(function(plaintext) {
+                    record.updateSessionState(session);
+                    return this.storage.storeSession(address, record.serialize()).then(function() {
+                        if (preKeyId !== undefined) {
+                            return this.storage.removePreKey(preKeyId);
+                        }
+                    }.bind(this)).then(function() {
+                        return plaintext;
+                    });
+                }.bind(this));
+            }.bind(this));
+        }.bind(this));
+    }.bind(this));
+  },
+
+  doDecryptWhisperMessage: function(messageBytes, session) {
+    if (!(messageBytes instanceof Buffer)) {
+        throw new Error("Expected messageBytes to be a Buffer");
+    }
+    var version = Uint8Array.from(messageBytes)[0];
     if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
         throw new Error("Incompatible version number on WhisperMessage");
     }
@@ -208,7 +222,7 @@ SessionCipher.prototype = {
     var mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
 
     var message = protobufs.WhisperMessage.decode(messageProto);
-    var remoteEphemeralKey = message.ephemeralKey.toArrayBuffer();
+    var remoteEphemeralKey = message.ephemeralKey;
 
     if (session === undefined) {
         return Promise.reject(new Error("No session found to decrypt message from " + this.remoteAddress.toString()));
@@ -218,7 +232,9 @@ SessionCipher.prototype = {
     }
 
     return this.maybeStepRatchet(session, remoteEphemeralKey, message.previousCounter).then(function() {
-        var chain = session[helpers.toString(message.ephemeralKey)];
+        console.log("XXX: to string of ephemeral. Should be buffer now", message.ephemeralKey);
+        console.log("XXX: to string of ephemeral. Should be buffer now", message.ephemeralKey.toString('binary'));
+        var chain = session[message.ephemeralKey.toString('binary')];
         if (chain.chainType === ChainType.SENDING) {
             throw new Error("Tried to decrypt on a sending chain");
         }
@@ -231,7 +247,7 @@ SessionCipher.prototype = {
                 throw e;
             }
             delete chain.messageKeys[message.counter];
-            return crypto.HKDF(helpers.toArrayBuffer(messageKey), new ArrayBuffer(32), "WhisperMessageKeys");
+            return crypto.HKDF(messageKey, Buffer.alloc(32), "WhisperMessageKeys");
         });
     }.bind(this)).then(function(keys) {
         return this.storage.getIdentityKeyPair().then(function(ourIdentityKey) {
@@ -244,13 +260,14 @@ SessionCipher.prototype = {
 
             return crypto.verifyMAC(macInput.buffer, keys[1], mac, 8);
         }.bind(this)).then(function() {
-            return crypto.decrypt(keys[0], message.ciphertext.toArrayBuffer(), keys[2].slice(0, 16));
+            return crypto.decrypt(keys[0], message.ciphertext, keys[2].slice(0, 16));
         });
     }.bind(this)).then(function(plaintext) {
         delete session.pendingPreKey;
         return plaintext;
     });
   },
+
   fillMessageKeys: function(chain, counter) {
       if (Object.keys(chain.messageKeys).length >= 1000) {
           console.log("Too many message keys for chain");
@@ -278,6 +295,7 @@ SessionCipher.prototype = {
           }.bind(this));
       }.bind(this));
   },
+
   maybeStepRatchet: function(session, remoteKey, previousCounter) {
       if (session[helpers.toString(remoteKey)] !== undefined) {
           return Promise.resolve();
@@ -315,6 +333,7 @@ SessionCipher.prototype = {
           }.bind(this));
       }.bind(this));
   },
+
   calculateRatchet: function(session, remoteKey, sending) {
       var ratchet = session.currentRatchet;
 
@@ -337,6 +356,7 @@ SessionCipher.prototype = {
           });
       });
   },
+
   getRemoteRegistrationId: function() {
     return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
       return this.getRecord(this.remoteAddress.toString()).then(function(record) {
@@ -347,6 +367,7 @@ SessionCipher.prototype = {
       });
     }.bind(this));
   },
+
   hasOpenSession: function() {
     return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
       return this.getRecord(this.remoteAddress.toString()).then(function(record) {
@@ -357,6 +378,7 @@ SessionCipher.prototype = {
       });
     }.bind(this));
   },
+
   closeOpenSessionForDevice: function() {
     var address = this.remoteAddress.toString();
     return SessionLock.queueJobForNumber(address, function() {

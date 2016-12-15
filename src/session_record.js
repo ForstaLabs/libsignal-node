@@ -6,7 +6,6 @@
 
 const ARCHIVED_STATES_MAX_LENGTH = 40;
 const BaseKeyType = require('./base_key_type.js');
-const ByteBuffer = require('bytebuffer');
 const helpers = require('./helpers.js');
 
 
@@ -29,7 +28,9 @@ const SessionRecord = (function() {
 
     var SessionRecord = function(identityKey, registrationId) {
         this._sessions = {};
-        identityKey = helpers.toString(identityKey);
+        console.log(typeof identityKey);
+        console.log(identityKey);
+        //identityKey = helpers.toString(identityKey);
         if (typeof identityKey !== 'string') {
             throw new Error('SessionRecord: Invalid identityKey');
         }
@@ -80,6 +81,7 @@ const SessionRecord = (function() {
         },
 
         getSessionByBaseKey: function(baseKey) {
+            debugger;
             var session = this._sessions[helpers.toString(baseKey)];
             if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
                 console.log("Tried to lookup a session using our basekey");

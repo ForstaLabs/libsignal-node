@@ -1,19 +1,19 @@
 
-const ByteBuffer = require('bytebuffer');
 const crypto = require('./crypto.js');
 
 var VERSION = 0;
 
-function iterateHash(data, key, count) {
-    data = ByteBuffer.concat([data, key]).toArrayBuffer();
-    return crypto.hash(data).then(function(result) {
-        if (--count === 0) {
-            return result;
-        } else {
-            return iterateHash(result, key, count);
-        }
-    });
+
+async function iterateHash(data, key, count) {
+    combined = (new U8intArray(Buffer.concat([data, key]))).buffer;
+    const result = await crypto.hash(combined);
+    if (--count === 0) {
+        return result;
+    } else {
+        return iterateHash(result, key, count);
+    }
 }
+
 
 function shortToArrayBuffer(number) {
     return new Uint16Array([number]).buffer;
@@ -32,24 +32,26 @@ function getEncodedChunk(hash, offset) {
     return s;
 }
 
-function getDisplayStringFor(identifier, key, iterations) {
-    var bytes = ByteBuffer.concat([
-        shortToArrayBuffer(VERSION), key, identifier
-    ]).toArrayBuffer();
-    return iterateHash(bytes, key, iterations).then(function(output) {
-        output = new Uint8Array(output);
-        return getEncodedChunk(output, 0) +
-            getEncodedChunk(output, 5) +
-            getEncodedChunk(output, 10) +
-            getEncodedChunk(output, 15) +
-            getEncodedChunk(output, 20) +
-            getEncodedChunk(output, 25);
-    });
+async function getDisplayStringFor(identifier, key, iterations) {
+    const bytes = Buffer.concat([
+        shortToArrayBuffer(VERSION),
+        key,
+        identifier
+    ]);
+    const arraybuf = (new Uint8Array(bytes)).buffer;
+    const output = new Uint8Array(await iterateHash(arraybuf, key, iterations));
+    return getEncodedChunk(output, 0) +
+        getEncodedChunk(output, 5) +
+        getEncodedChunk(output, 10) +
+        getEncodedChunk(output, 15) +
+        getEncodedChunk(output, 20) +
+        getEncodedChunk(output, 25);
 }
 
 exports.FingerprintGenerator = function(iterations) {
     this.iterations = iterations;
 };
+
 exports.FingerprintGenerator.prototype = {
     createFor: function(localIdentifier, localIdentityKey,
                         remoteIdentifier, remoteIdentityKey) {
@@ -57,7 +59,6 @@ exports.FingerprintGenerator.prototype = {
             typeof remoteIdentifier !== 'string' ||
             !(localIdentityKey instanceof ArrayBuffer) ||
             !(remoteIdentityKey instanceof ArrayBuffer)) {
-
           throw new Error('Invalid arguments');
         }
 

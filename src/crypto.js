@@ -4,18 +4,21 @@
 
 'use strict';
 
-const ByteBuffer = require('bytebuffer');
+
 const curve = require('./curve.js');
 const helpers = require('./helpers.js');
 const node_crypto = require('crypto');
 const subtle = require('subtle');
 
+
 function encrypt(key, data, iv) {
+    throw new Error("XXX port this");
     return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
                             ['encrypt']).then(function(key) {
         return subtle.encrypt({name: 'AES-CBC', iv: new Uint8Array(iv)}, key, data);
     });
 }
+
 
 async function decrypt(key, data, iv) {
     const decipher = node_crypto.createDecipheriv('aes-256-cbc',
@@ -32,8 +35,14 @@ async function decrypt(key, data, iv) {
 }
 
 async function sign(key, data) {
-    const hmac = node_crypto.createHmac('sha256', Buffer.from(key));
-    hmac.update(Buffer.from(data));
+    if (!(key instanceof Buffer)) {
+        throw new Error("Key must be Buffer type");
+    }
+    if (!(data instanceof Buffer)) {
+        throw new Error("Data must be Buffer type");
+    }
+    const hmac = node_crypto.createHmac('sha256', key);
+    hmac.update(data);
     return hmac.digest();
 }
 
@@ -51,6 +60,8 @@ async function HKDF(input, salt, plaininfo) {
     if (salt.byteLength != 32) {
         throw new Error("Got salt of incorrect length");
     }
+    console.log(plaininfo.constructor.name);
+    throw new Error("is plaininfo already a buffer?  cause that's good engough");
     const info = helpers.toArrayBuffer(plaininfo);
     const PRK = await sign(salt, input);
     const infoBuffer = new ArrayBuffer(info.byteLength + 1 + 32);
@@ -88,13 +99,13 @@ async function verifyMAC(data, key, mac, length) {
 }
 
 function getRandomBytes(len) {
-    //return ByteBuffer.wrap(node_crypto.randomBytes(len));
-    return node_crypto.randomBytes(len).buffer;
+    throw new Error("DEPRECATED");
+    return node_crypto.randomBytes(len);
 }
 
 function createKeyPair(privKey) {
     if (privKey === undefined) {
-        privKey = getRandomBytes(32);
+        privKey = node_crypto.randomBytes(32); // XXX this may actually need to be an ArrayBuffer.
     }
     return curve.async.createKeyPair(privKey);
 }
