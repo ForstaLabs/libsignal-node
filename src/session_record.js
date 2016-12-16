@@ -6,21 +6,6 @@
 
 const ARCHIVED_STATES_MAX_LENGTH = 40;
 const BaseKeyType = require('./base_key_type.js');
-const helpers = require('./helpers.js');
-
-
-function array_buffer_encode(value) {
-    if (!(value instanceof ArrayBuffer)) {
-        throw new Error(`Invalid type for: ${value}`);
-    }
-    const buf = new Buffer(new Uint8Array(value));
-    return buf.toString('binary');
-}
-
-function array_buffer_decode(raw) {
-    const buf = new Buffer(raw, 'binary');
-    return (new Uint8Array(buf)).buffer;
-}
 
 
 const SessionRecord = (function() {
@@ -28,11 +13,8 @@ const SessionRecord = (function() {
 
     var SessionRecord = function(identityKey, registrationId) {
         this._sessions = {};
-        console.log(typeof identityKey);
-        console.log(identityKey);
-        //identityKey = helpers.toString(identityKey);
-        if (typeof identityKey !== 'string') {
-            throw new Error('SessionRecord: Invalid identityKey');
+        if (!(identityKey instanceof Buffer)) {
+            throw new TypeError('identityKey must be Buffer');
         }
         this.identityKey = identityKey;
         this.registrationId = registrationId;
@@ -43,13 +25,13 @@ const SessionRecord = (function() {
     };
 
     SessionRecord.deserialize = function(data) {
-        data.identityKey = new Buffer(data.identityKey, 'binary');
+        data.identityKey = Buffer.from(data.identityKey, 'base64');
         for (const x of Object.keys(data.sessions)) {
             let s = data.sessions[x];
             let cr = s.currentRatchet;
-            cr.rootKey = new Buffer(cr.rootKey, 'binary');
-            cr.lastRemoteEphemeralKey = array_buffer_decode(cr.lastRemoteEphemeralKey);
-            s.indexInfo.remoteIdentityKey = array_buffer_decode(s.indexInfo.remoteIdentityKey);
+            cr.rootKey = Buffer.from(cr.rootKey, 'base64');
+            cr.lastRemoteEphemeralKey = Buffer.from(cr.lastRemoteEphemeralKey, 'base64');
+            s.indexInfo.remoteIdentityKey = Buffer.from(s.indexInfo.remoteIdentityKey, 'base64');
         }
         var record = new SessionRecord(data.identityKey, data.registrationId);
         record._sessions = data.sessions;
@@ -60,14 +42,14 @@ const SessionRecord = (function() {
         serialize: function() {
             const sessions = Object.keys(this._sessions).map(function(x) {
                 let src = this._sessions[x];
-                let dst = JSON.parse(JSON.stringify(src)); // deep copy
+                let dst = JSON.parse(JSON.stringify(src)); // deep copy sans-buffers
                 let cr = src.currentRatchet;
                 let ekp = cr.ephemeralKeyPair;
-                dst.currentRatchet.rootKey = cr.rootKey.toString('binary');
-                dst.currentRatchet.lastRemoteEphemeralKey = array_buffer_encode(cr.lastRemoteEphemeralKey);
-                dst.currentRatchet.ephemeralKeyPair.pubKey = array_buffer_encode(ekp.pubKey);
-                dst.currentRatchet.ephemeralKeyPair.privKey = array_buffer_encode(ekp.privKey);
-                dst.indexInfo.remoteIdentityKey = array_buffer_encode(src.indexInfo.remoteIdentityKey);
+                dst.currentRatchet.rootKey = cr.rootKey.toString('base64');
+                dst.currentRatchet.lastRemoteEphemeralKey = cr.lastRemoteEphemeralKey.toString('base64');
+                dst.currentRatchet.ephemeralKeyPair.pubKey = ekp.pubKey.toString('base64');
+                dst.currentRatchet.ephemeralKeyPair.privKey = ekp.privKey.toString('base64');
+                dst.indexInfo.remoteIdentityKey = src.indexInfo.remoteIdentityKey.toString('base64');
                 return dst;
             }.bind(this));
             return {
@@ -76,24 +58,25 @@ const SessionRecord = (function() {
                 identityKey: this.identityKey.toString('binary')
             };
         },
+
         haveOpenSession: function() {
             return this.registrationId !== null;
         },
 
         getSessionByBaseKey: function(baseKey) {
-            debugger;
-            var session = this._sessions[helpers.toString(baseKey)];
+            var session = this._sessions[baseKey.toString('base64')];
             if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
                 console.log("Tried to lookup a session using our basekey");
                 return undefined;
             }
             return session;
         },
+
         getSessionByRemoteEphemeralKey: function(remoteEphemeralKey) {
             this.detectDuplicateOpenSessions();
             var sessions = this._sessions;
 
-            var searchKey = helpers.toString(remoteEphemeralKey);
+            var searchKey = remoteEphemeralKey.toString('base64');
 
             var openSession;
             for (var key in sessions) {
@@ -110,6 +93,7 @@ const SessionRecord = (function() {
 
             return undefined;
         },
+
         getOpenSession: function() {
             var sessions = this._sessions;
             if (sessions === undefined) {
@@ -125,6 +109,7 @@ const SessionRecord = (function() {
             }
             return undefined;
         },
+
         detectDuplicateOpenSessions: function() {
             var openSession;
             var sessions = this._sessions;
@@ -137,6 +122,7 @@ const SessionRecord = (function() {
                 }
             }
         },
+
         updateSessionState: function(session, registrationId) {
             var sessions = this._sessions;
 
@@ -145,13 +131,14 @@ const SessionRecord = (function() {
             if (this.identityKey === null) {
                 this.identityKey = session.indexInfo.remoteIdentityKey;
             }
-            if (helpers.toString(this.identityKey) !== helpers.toString(session.indexInfo.remoteIdentityKey)) {
+            if (this.identityKey.toString('binary') !==
+                session.indexInfo.remoteIdentityKey.toString('binary')) {
                 var e = new Error("Identity key changed at session save time");
-                e.identityKey = session.indexInfo.remoteIdentityKey.toArrayBuffer();
+                e.identityKey = session.indexInfo.remoteIdentityKey;
                 throw e;
             }
 
-            sessions[helpers.toString(session.indexInfo.baseKey)] = session;
+            sessions[session.indexInfo.baseKey.toString('base64')] = session;
 
             this.removeOldSessions();
 
@@ -169,6 +156,7 @@ const SessionRecord = (function() {
                 throw new Error("Had open sessions on a record that had no registrationId set");
             }
         },
+
         getSessions: function() {
             // return an array of sessions ordered by time closed,
             // followed by the open session
@@ -189,6 +177,7 @@ const SessionRecord = (function() {
             }
             return list;
         },
+
         archiveCurrentState: function() {
             var open_session = this.getOpenSession();
             if (open_session !== undefined) {
@@ -196,6 +185,7 @@ const SessionRecord = (function() {
                 this.updateSessionState(open_session);
             }
         },
+
         closeSession: function(session) {
             if (session.indexInfo.closed > -1) {
                 return;
@@ -207,18 +197,20 @@ const SessionRecord = (function() {
             // but we cannot send messages or step the ratchet
 
             // Delete current sending ratchet
-            delete session[helpers.toString(session.currentRatchet.ephemeralKeyPair.pubKey)];
+            delete session[session.currentRatchet.ephemeralKeyPair.pubKey.toString('base64')];
             // Move all receive ratchets to the oldRatchetList to mark them for deletion
             for (var i in session) {
                 if (session[i].chainKey !== undefined && session[i].chainKey.key !== undefined) {
                     session.oldRatchetList[session.oldRatchetList.length] = {
-                        added: Date.now(), ephemeralKey: i
+                        added: Date.now(),
+                        ephemeralKey: i
                     };
                 }
             }
             session.indexInfo.closed = Date.now();
             this.removeOldChains(session);
         },
+
         removeOldChains: function(session) {
             // Sending ratchets are always removed when we step because we never need them again
             // Receiving ratchets are added to the oldRatchetList, which we parse
@@ -233,10 +225,11 @@ const SessionRecord = (function() {
                     }
                 }
                 console.log("Deleting chain closed at", oldest.added);
-                delete session[helpers.toString(oldest.ephemeralKey)];
+                delete session[oldest.ephemeralKey.toString('base64')];
                 session.oldRatchetList.splice(index, 1);
             }
         },
+
         removeOldSessions: function() {
             // Retain only the last 20 sessions
             var sessions = this._sessions;
@@ -251,9 +244,9 @@ const SessionRecord = (function() {
                     }
                 }
                 console.log("Deleting session closed at", oldestSession.indexInfo.closed);
-                delete sessions[helpers.toString(oldestBaseKey)];
+                delete sessions[oldestBaseKey];
             }
-        },
+        }
     };
 
     return SessionRecord;

@@ -8,6 +8,14 @@ const helpers = require('./helpers.js');
 const protobufs = require('./protobufs.js');
 
 
+function assert_buffer(value) {
+    if (!(value instanceof Buffer)) {
+        throw TypeError(`Expected Buffer instead of: ${value.constructor.name}`);
+    }
+    return value;
+}
+
+
 function SessionCipher(storage, remoteAddress) {
   this.remoteAddress = remoteAddress;
   this.storage = storage;
@@ -25,15 +33,11 @@ SessionCipher.prototype = {
   },
 
   encrypt: function(buffer, encoding) {
-    console.warn(buffer, encoding);
-    throw new Error(buffer);
-    //buffer = ByteBuffer.wrap(buffer, encoding).toArrayBuffer();
-    buffer = (new Uint8Array(Buffer.from(buffer, encoding))).buffer;
+    assert_buffer(buffer);
+    if (encoding !== undefined) {
+      throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
+    }
     return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
-      if (!(buffer instanceof ArrayBuffer)) {
-          throw new Error("Expected buffer to be an ArrayBuffer");
-      }
-
       var address = this.remoteAddress.toString();
       var ourIdentityKey, myRegistrationId, record, session, chain;
 
@@ -55,43 +59,38 @@ SessionCipher.prototype = {
               throw new Error("No session to encrypt message for " + address);
           }
 
-          msg.ephemeralKey = helpers.toArrayBuffer(
-              session.currentRatchet.ephemeralKeyPair.pubKey
-          );
-          chain = session[helpers.toString(msg.ephemeralKey)];
+          msg.ephemeralKey = session.currentRatchet.ephemeralKeyPair.pubKey;
+          chain = session[msg.ephemeralKey.toString('base64')];
           if (chain.chainType === ChainType.RECEIVING) {
               throw new Error("Tried to encrypt on a receiving chain");
           }
 
           return this.fillMessageKeys(chain, chain.chainKey.counter + 1);
       }.bind(this)).then(function() {
-            // XXX
-          return crypto.HKDF(
-              helpers.toArrayBuffer(chain.messageKeys[chain.chainKey.counter]),
+          // XXX inspect the user of empty ArrayBuffer here
+          return crypto.HKDF(chain.messageKeys[chain.chainKey.counter],
               new ArrayBuffer(32), "WhisperMessageKeys");
       }).then(function(keys) {
           delete chain.messageKeys[chain.chainKey.counter];
           msg.counter = chain.chainKey.counter;
           msg.previousCounter = session.currentRatchet.previousCounter;
 
-          return crypto.encrypt(
-              keys[0], buffer, keys[2].slice(0, 16)
+          return crypto.encrypt(keys[0], buffer, keys[2].slice(0, 16)
           ).then(function(ciphertext) {
               msg.ciphertext = ciphertext;
-              var encodedMsg = msg.toArrayBuffer();
+              var encodedMsg = msg;
 
               var macInput = new Uint8Array(encodedMsg.byteLength + 33*2 + 1);
-              macInput.set(new Uint8Array(helpers.toArrayBuffer(ourIdentityKey.pubKey)));
-              macInput.set(new Uint8Array(helpers.toArrayBuffer(session.indexInfo.remoteIdentityKey)), 33);
+              macInput.set(ourIdentityKey.pubKey);
+              macInput.set(session.indexInfo.remoteIdentityKey, 33);
               macInput[33*2] = (3 << 4) | 3;
-              macInput.set(new Uint8Array(encodedMsg), 33*2 + 1);
+              macInput.set(encodedMsg, 33*2 + 1);
 
-              return crypto.sign(keys[1], macInput.buffer).then(function(mac) {
+              return crypto.sign(keys[1], macInput).then(function(mac) {
                   var result = new Uint8Array(encodedMsg.byteLength + 9);
                   result[0] = (3 << 4) | 3;
-                  result.set(new Uint8Array(encodedMsg), 1);
-                  result.set(new Uint8Array(mac, 0, 8), encodedMsg.byteLength + 1);
-
+                  result.set(encodedMsg, 1);
+                  result.set(mac.slice(0, 8), encodedMsg.byteLength + 1);
                   record.updateSessionState(session);
                   return this.storage.storeSession(address, record.serialize()).then(function() {
                       return result;
@@ -101,15 +100,15 @@ SessionCipher.prototype = {
       }.bind(this)).then(function(message) {
           if (session.pendingPreKey !== undefined) {
               var preKeyMsg = new protobufs.PreKeyWhisperMessage();
-              preKeyMsg.identityKey = helpers.toArrayBuffer(ourIdentityKey.pubKey);
+              preKeyMsg.identityKey = ourIdentityKey.pubKey;
               preKeyMsg.registrationId = myRegistrationId;
 
-              preKeyMsg.baseKey = helpers.toArrayBuffer(session.pendingPreKey.baseKey);
+              preKeyMsg.baseKey = session.pendingPreKey.baseKey;
               preKeyMsg.preKeyId = session.pendingPreKey.preKeyId;
               preKeyMsg.signedPreKeyId = session.pendingPreKey.signedKeyId;
 
               preKeyMsg.message = message;
-              var result = String.fromCharCode((3 << 4) | 3) + helpers.toString(preKeyMsg.encode());
+              var result = String.fromCharCode((3 << 4) | 3) + preKeyMsg.toString('binary');
               return {
                   type           : 3,
                   body           : result,
@@ -118,9 +117,9 @@ SessionCipher.prototype = {
 
           } else {
               return {
-                  type           : 1,
-                  body           : helpers.toString(message),
-                  registrationId : record.registrationId
+                  type: 1,
+                  body: message,
+                  registrationId: record.registrationId
               };
           }
       });
@@ -145,34 +144,34 @@ SessionCipher.prototype = {
   },
 
   decryptWhisperMessage: function(buffer, encoding) {
-      console.warn(buffer, encoding);
-      buffer = (new Uint8Array(Buffer.from(buffer, encoding))).buffer;
-      return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
-        var address = this.remoteAddress.toString();
-        return this.getRecord(address).then(function(record) {
-            if (!record) {
-                throw new Error("No record for device " + address);
-            }
-            var errors = [];
-            return this.decryptWithSessionList(buffer, record.getSessions(), errors).then(function(result) {
-                return this.getRecord(address).then(function(record) {
-                    record.updateSessionState(result.session);
-                    return this.storage.storeSession(address, record.serialize()).then(function() {
-                        return result.plaintext;
-                    });
-                }.bind(this));
-            }.bind(this));
+    if (encoding !== undefined) {
+      throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
+    }
+    assert_buffer(buffer);
+    return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
+      var address = this.remoteAddress.toString();
+      return this.getRecord(address).then(function(record) {
+        if (!record) {
+          throw new Error("No record for device " + address);
+        }
+        var errors = [];
+        return this.decryptWithSessionList(buffer, record.getSessions(), errors).then(function(result) {
+          return this.getRecord(address).then(function(record) {
+            record.updateSessionState(result.session);
+            return this.storage.storeSession(address, record.serialize()).then(function() {
+              return result.plaintext;
+            });
+          }.bind(this));
         }.bind(this));
       }.bind(this));
+    }.bind(this));
   },
 
   decryptPreKeyWhisperMessage: function(buffer, encoding) {
     if (encoding !== undefined) {
        throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
     }
-    if (!(buffer instanceof Buffer)) {
-       throw new Error("Buffer type type required");
-    }
+    assert_buffer(buffer);
     var version = buffer[0];
     if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
       throw new Error("Incompatible version number on PreKeyWhisperMessage");
@@ -180,7 +179,6 @@ SessionCipher.prototype = {
     return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
         var address = this.remoteAddress.toString();
         return this.getRecord(address).then(function(record) {
-            
             var preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
             if (!record) {
                 if (preKeyProto.registrationId === undefined) {
@@ -211,14 +209,12 @@ SessionCipher.prototype = {
   },
 
   doDecryptWhisperMessage: function(messageBytes, session) {
-    if (!(messageBytes instanceof Buffer)) {
-        throw new Error("Expected messageBytes to be a Buffer");
-    }
-    var version = Uint8Array.from(messageBytes)[0];
+    assert_buffer(messageBytes);
+    var version = messageBytes[0];
     if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
         throw new Error("Incompatible version number on WhisperMessage");
     }
-    var messageProto = messageBytes.slice(1, messageBytes.byteLength- 8);
+    var messageProto = messageBytes.slice(1, messageBytes.byteLength - 8);
     var mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
 
     var message = protobufs.WhisperMessage.decode(messageProto);
@@ -232,9 +228,8 @@ SessionCipher.prototype = {
     }
 
     return this.maybeStepRatchet(session, remoteEphemeralKey, message.previousCounter).then(function() {
-        console.log("XXX: to string of ephemeral. Should be buffer now", message.ephemeralKey);
-        console.log("XXX: to string of ephemeral. Should be buffer now", message.ephemeralKey.toString('binary'));
-        var chain = session[message.ephemeralKey.toString('binary')];
+        assert_buffer(message.ephemeralKey);
+        var chain = session[message.ephemeralKey.toString('base64')];
         if (chain.chainType === ChainType.SENDING) {
             throw new Error("Tried to decrypt on a sending chain");
         }
@@ -251,14 +246,12 @@ SessionCipher.prototype = {
         });
     }.bind(this)).then(function(keys) {
         return this.storage.getIdentityKeyPair().then(function(ourIdentityKey) {
-
             var macInput = new Uint8Array(messageProto.byteLength + 33*2 + 1);
-            macInput.set(new Uint8Array(helpers.toArrayBuffer(session.indexInfo.remoteIdentityKey)));
-            macInput.set(new Uint8Array(helpers.toArrayBuffer(ourIdentityKey.pubKey)), 33);
+            macInput.set(session.indexInfo.remoteIdentityKey);
+            macInput.set(ourIdentityKey.pubKey, 33);
             macInput[33*2] = (3 << 4) | 3;
-            macInput.set(new Uint8Array(messageProto), 33*2 + 1);
-
-            return crypto.verifyMAC(macInput.buffer, keys[1], mac, 8);
+            macInput.set(messageProto, 33*2 + 1);
+            return crypto.verifyMAC(macInput, keys[1], mac, 8);
         }.bind(this)).then(function() {
             return crypto.decrypt(keys[0], message.ciphertext, keys[2].slice(0, 16));
         });
@@ -282,12 +275,9 @@ SessionCipher.prototype = {
           throw new Error("Got invalid request to extend chain after it was already closed");
       }
 
-      var key = helpers.toArrayBuffer(chain.chainKey.key);
-      var byteArray = new Uint8Array(1);
-      byteArray[0] = 1;
-      return crypto.sign(key, byteArray.buffer).then(function(mac) {
-          byteArray[0] = 2;
-          return crypto.sign(key, byteArray.buffer).then(function(key) {
+      var key = chain.chainKey.key;
+      return crypto.sign(key, Buffer.from([1])).then(function(mac) {
+          return crypto.sign(key, Buffer.from([2])).then(function(key) {
               chain.messageKeys[chain.chainKey.counter + 1] = mac;
               chain.chainKey.key = key;
               chain.chainKey.counter += 1;
@@ -297,7 +287,7 @@ SessionCipher.prototype = {
   },
 
   maybeStepRatchet: function(session, remoteKey, previousCounter) {
-      if (session[helpers.toString(remoteKey)] !== undefined) {
+      if (session[remoteKey.toString('base64')] !== undefined) {
           return Promise.resolve();
       }
 
@@ -305,7 +295,7 @@ SessionCipher.prototype = {
       var ratchet = session.currentRatchet;
 
       return Promise.resolve().then(function() {
-          var previousRatchet = session[helpers.toString(ratchet.lastRemoteEphemeralKey)];
+          var previousRatchet = session[ratchet.lastRemoteEphemeralKey.toString('base64')];
           if (previousRatchet !== undefined) {
               return this.fillMessageKeys(previousRatchet, previousCounter).then(function() {
                   delete previousRatchet.chainKey.key;
@@ -318,7 +308,7 @@ SessionCipher.prototype = {
       }.bind(this)).then(function() {
           return this.calculateRatchet(session, remoteKey, false).then(function() {
               // Now swap the ephemeral key and calculate the new sending chain
-              var previousRatchet = helpers.toString(ratchet.ephemeralKeyPair.pubKey);
+              var previousRatchet = ratchet.ephemeralKeyPair.pubKey.toString('base64');
               if (session[previousRatchet] !== undefined) {
                   ratchet.previousCounter = session[previousRatchet].chainKey.counter;
                   delete session[previousRatchet];
@@ -337,9 +327,8 @@ SessionCipher.prototype = {
   calculateRatchet: function(session, remoteKey, sending) {
       var ratchet = session.currentRatchet;
 
-      return crypto.calculateAgreement(remoteKey, helpers.toArrayBuffer(ratchet.ephemeralKeyPair.privKey)).then(function(sharedSecret) {
-            // XXX
-          return crypto.HKDF(sharedSecret, helpers.toArrayBuffer(ratchet.rootKey), "WhisperRatchet").then(function(masterKey) {
+      return crypto.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey).then(function(sharedSecret) {
+          return crypto.HKDF(sharedSecret, ratchet.rootKey, "WhisperRatchet").then(function(masterKey) {
               var ephemeralPublicKey;
               if (sending) {
                   ephemeralPublicKey = ratchet.ephemeralKeyPair.pubKey;
@@ -347,7 +336,7 @@ SessionCipher.prototype = {
               else {
                   ephemeralPublicKey = remoteKey;
               }
-              session[helpers.toString(ephemeralPublicKey)] = {
+              session[ephemeralPublicKey.toString('base64')] = {
                   messageKeys: {},
                   chainKey: { counter: -1, key: masterKey[1] },
                   chainType: sending ? ChainType.SENDING : ChainType.RECEIVING

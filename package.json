@@ -5,7 +5,6 @@
   "license": "GPL-3.0",
   "dependencies": {
     "long": "3.1.0",
-    "protobufjs": "6.1.1",
-    "subtle": "0.1.8"
+    "protobufjs": "6.1.1"
   }
 }

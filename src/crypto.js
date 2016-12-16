@@ -6,75 +6,73 @@
 
 
 const curve = require('./curve.js');
-const helpers = require('./helpers.js');
 const node_crypto = require('crypto');
-const subtle = require('subtle');
+
+
+function assert_buffer(value) {
+    if (!(value instanceof Buffer)) {
+        throw TypeError(`Expected Buffer instead of: ${value.constructor.name}`);
+    }
+    return value;
+}
 
 
 function encrypt(key, data, iv) {
-    throw new Error("XXX port this");
-    return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
-                            ['encrypt']).then(function(key) {
-        return subtle.encrypt({name: 'AES-CBC', iv: new Uint8Array(iv)}, key, data);
-    });
+    assert_buffer(key);
+    assert_buffer(data);
+    assert_buffer(iv);
+    const cipher = node_crypto.createCipheriv('aes-256-cbc', key, iv);
+    return Buffer.concat([cipher.update(data), cipher.final()]);
 }
 
 
 async function decrypt(key, data, iv) {
-    const decipher = node_crypto.createDecipheriv('aes-256-cbc',
-                                                  Buffer.from(key),
-                                                  Buffer.from(iv));
-    return Buffer.concat([
-        decipher.update(Buffer.from(data)),
-        decipher.final()
-    ]);
-    //return subtle.importKey('raw', key, {name: 'AES-CBC'}, false,
-     //                       ['decrypt']).then(function(key) {
-      //  return subtle.decrypt({name: 'AES-CBC', iv: new Uint8Array(iv)}, key, data);
-    //});
+    assert_buffer(key);
+    assert_buffer(data);
+    assert_buffer(iv);
+    const decipher = node_crypto.createDecipheriv('aes-256-cbc', key, iv);
+    return Buffer.concat([decipher.update(data), decipher.final()]);
 }
+
 
 async function sign(key, data) {
-    if (!(key instanceof Buffer)) {
-        throw new Error("Key must be Buffer type");
-    }
-    if (!(data instanceof Buffer)) {
-        throw new Error("Data must be Buffer type");
-    }
+    assert_buffer(key);
+    assert_buffer(data);
     const hmac = node_crypto.createHmac('sha256', key);
     hmac.update(data);
-    return hmac.digest();
+    return Buffer.from(hmac.digest());
 }
 
-function hash(data) {
-    const h = subtle.digest({name: 'SHA-512'}, data);
-    console.log(h);
-    throw new Error('hash check');
+
+async function hash(data) {
+    assert_buffer(data);
+    const sha512 = crypto.createHash('sha512');
+    sha512.update(data);
+    return sha512.digest();
 }
 
 // HKDF for TextSecure has a bit of additional handling.
 // Salts always end up being 32 bytes
-async function HKDF(input, salt, plaininfo) {
+async function HKDF(input, salt, info) {
     // Specific implementation of RFC 5869 that only returns the first 3 32-byte chunks
     // TODO: We dont always need the third chunk, we might skip it
+    assert_buffer(input);
+    assert_buffer(salt);
+    assert_buffer(info);
     if (salt.byteLength != 32) {
         throw new Error("Got salt of incorrect length");
     }
-    console.log(plaininfo.constructor.name);
-    throw new Error("is plaininfo already a buffer?  cause that's good engough");
-    const info = helpers.toArrayBuffer(plaininfo);
     const PRK = await sign(salt, input);
-    const infoBuffer = new ArrayBuffer(info.byteLength + 1 + 32);
-    const infoArray = new Uint8Array(infoBuffer);
-    infoArray.set(new Uint8Array(info), 32);
+    const infoArray = new Uint8Array(info.byteLength + 1 + 32);
+    infoArray.set(info, 32);
     infoArray[infoArray.length - 1] = 1;
-    const T1 = await sign(PRK, infoBuffer.slice(32));
-    infoArray.set(new Uint8Array(T1));
+    const T1 = await sign(PRK, Buffer.from(infoArray.slice(32)));
+    infoArray.set(T1);
     infoArray[infoArray.length - 1] = 2;
-    const T2 = await sign(PRK, infoBuffer);
-    infoArray.set(new Uint8Array(T2));
+    const T2 = await sign(PRK, Buffer.from(infoArray));
+    infoArray.set(T2);
     infoArray[infoArray.length - 1] = 3;
-    const T3 = await sign(PRK, infoBuffer);
+    const T3 = await sign(PRK, Buffer.from(infoArray));
     return [T1, T2, T3];
 }
 

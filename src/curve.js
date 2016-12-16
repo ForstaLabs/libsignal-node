@@ -18,6 +18,9 @@ function validatePrivKey(privKey) {
 }
 
 function validatePubKeyFormat(pubKey) {
+    if (!(pubKey instanceof Buffer)) {
+        throw new Error(`Invalid public key type: ${pubKey.constructor.name}`);
+    }
     if (pubKey === undefined || ((pubKey.byteLength != 33 || pubKey[0] != 5) && pubKey.byteLength != 32)) {
         throw new Error("Invalid public key");
     }
@@ -65,12 +68,15 @@ function wrapCurve25519(curve) {
         },
         Ed25519Sign: function(privKey, message) {
             validatePrivKey(privKey);
-
             if (message === undefined) {
                 throw new Error("Invalid message");
             }
-
-            return curve.sign(privKey, message);
+            const raw_sig = curve.sign(privKey, message);
+            if (raw_sig instanceof Promise) {
+                return raw_sig.then(Buffer.from);
+            } else {
+                return Buffer.from(raw_keys);
+            }
         },
         Ed25519Verify: function(pubKey, msg, sig) {
             pubKey = validatePubKeyFormat(pubKey);
@@ -111,7 +117,9 @@ function wrapCurve(curve) {
             return curve.Ed25519Verify(pubKey, msg, sig);
         },
         calculateSignature: function(privKey, message) {
-            return curve.Ed25519Sign(privKey, message);
+            const s = curve.Ed25519Sign(privKey, message);
+            debugger;
+            return s
         }
     };
 }
