@@ -177,34 +177,33 @@ SessionCipher.prototype = {
       throw new Error("Incompatible version number on PreKeyWhisperMessage");
     }
     return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
-        var address = this.remoteAddress.toString();
-        return this.getRecord(address).then(function(record) {
-            var preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
-            if (!record) {
-                if (preKeyProto.registrationId === undefined) {
-                    throw new Error("No registrationId");
-                }
-                record = new SessionRecord(
-                    preKeyProto.identityKey.toString('binary'),
-                    preKeyProto.registrationId
-                );
-            }
-            var builder = new SessionBuilder(this.storage, this.remoteAddress);
-            return builder.processV3(record, preKeyProto).then(function(preKeyId) {
-                var session = record.getSessionByBaseKey(preKeyProto.baseKey);
-                return this.doDecryptWhisperMessage(preKeyProto.message, session
-                ).then(function(plaintext) {
-                    record.updateSessionState(session);
-                    return this.storage.storeSession(address, record.serialize()).then(function() {
-                        if (preKeyId !== undefined) {
-                            return this.storage.removePreKey(preKeyId);
-                        }
-                    }.bind(this)).then(function() {
-                        return plaintext;
-                    });
-                }.bind(this));
-            }.bind(this));
+      var address = this.remoteAddress.toString();
+      return this.getRecord(address).then(function(record) {
+        var preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
+        if (!record) {
+          if (preKeyProto.registrationId === undefined) {
+            throw new Error("No registrationId");
+          }
+          record = new SessionRecord(
+            preKeyProto.identityKey.toString('binary'),
+            preKeyProto.registrationId
+          );
+        }
+        var builder = new SessionBuilder(this.storage, this.remoteAddress);
+        return builder.processV3(record, preKeyProto).then(function(preKeyId) {
+          var session = record.getSessionByBaseKey(preKeyProto.baseKey);
+          return this.doDecryptWhisperMessage(preKeyProto.message, session).then(function(plaintext) {
+            record.updateSessionState(session);
+            return this.storage.storeSession(address, record.serialize()).then(function() {
+              if (preKeyId !== undefined) {
+                return this.storage.removePreKey(preKeyId);
+              }
+            }.bind(this)).then(function() {
+              return plaintext;
+            });
+          }.bind(this));
         }.bind(this));
+      }.bind(this));
     }.bind(this));
   },
 
