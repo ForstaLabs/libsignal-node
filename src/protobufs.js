@@ -11,5 +11,5 @@ const p = protobuf.loadSync('./protos/WhisperTextProtocol.proto').lookup('textse
 
 module.exports = {
     WhisperMessage: p.lookup('WhisperMessage'),
-    PreKeyWhisperMessage: p.lookup('PreKeyWhisperMessage')
+    PreKeyWhisperMessage: p.lookup('PreKeyWhisperMessage'),
 };
