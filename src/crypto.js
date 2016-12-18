@@ -26,7 +26,7 @@ function encrypt(key, data, iv) {
 }
 
 
-async function decrypt(key, data, iv) {
+function decrypt(key, data, iv) {
     assert_buffer(key);
     assert_buffer(data);
     assert_buffer(iv);
@@ -35,7 +35,7 @@ async function decrypt(key, data, iv) {
 }
 
 
-async function sign(key, data) {
+function sign(key, data) {
     assert_buffer(key);
     assert_buffer(data);
     const hmac = node_crypto.createHmac('sha256', key);
@@ -44,7 +44,7 @@ async function sign(key, data) {
 }
 
 
-async function hash(data) {
+function hash(data) {
     assert_buffer(data);
     const sha512 = crypto.createHash('sha512');
     sha512.update(data);
@@ -53,7 +53,7 @@ async function hash(data) {
 
 // HKDF for TextSecure has a bit of additional handling.
 // Salts always end up being 32 bytes
-async function HKDF(input, salt, info) {
+function HKDF(input, salt, info) {
     // Specific implementation of RFC 5869 that only returns the first 3 32-byte chunks
     // TODO: We dont always need the third chunk, we might skip it
     assert_buffer(input);
@@ -62,22 +62,22 @@ async function HKDF(input, salt, info) {
     if (salt.byteLength != 32) {
         throw new Error("Got salt of incorrect length");
     }
-    const PRK = await sign(salt, input);
+    const PRK = sign(salt, input);
     const infoArray = new Uint8Array(info.byteLength + 1 + 32);
     infoArray.set(info, 32);
     infoArray[infoArray.length - 1] = 1;
-    const T1 = await sign(PRK, Buffer.from(infoArray.slice(32)));
+    const T1 = sign(PRK, Buffer.from(infoArray.slice(32)));
     infoArray.set(T1);
     infoArray[infoArray.length - 1] = 2;
-    const T2 = await sign(PRK, Buffer.from(infoArray));
+    const T2 = sign(PRK, Buffer.from(infoArray));
     infoArray.set(T2);
     infoArray[infoArray.length - 1] = 3;
-    const T3 = await sign(PRK, Buffer.from(infoArray));
+    const T3 = sign(PRK, Buffer.from(infoArray));
     return [T1, T2, T3];
 }
 
-async function verifyMAC(data, key, mac, length) {
-    const calculated_mac = await sign(key, data);
+function verifyMAC(data, key, mac, length) {
+    const calculated_mac = sign(key, data);
     if (mac.byteLength != length || calculated_mac.byteLength < length) {
         throw new Error("Bad MAC length");
     }
@@ -92,6 +92,7 @@ async function verifyMAC(data, key, mac, length) {
     if (result !== 0) {
         console.log('Our MAC  ', a);
         console.log('Their MAC', b);
+        debugger;
         throw new Error("Bad MAC");
     }
 }
@@ -105,19 +106,19 @@ function createKeyPair(privKey) {
     if (privKey === undefined) {
         privKey = node_crypto.randomBytes(32);
     }
-    return curve.async.createKeyPair(privKey);
+    return curve.createKeyPair(privKey);
 }
 
 function calculateAgreement(pubKey, privKey) {
-    return curve.async.calculateAgreement(pubKey, privKey);
+    return curve.calculateAgreement(pubKey, privKey);
 }
 
 function calculateSignature(privKey, message) {
-    return curve.async.calculateSignature(privKey, message);
+    return curve.calculateSignature(privKey, message);
 }
 
 function generateKeyPair(privKey, message) {
-    return curve.async.generateKeyPair(privKey, message);
+    return curve.generateKeyPair(privKey, message);
 }
 
 module.exports = {

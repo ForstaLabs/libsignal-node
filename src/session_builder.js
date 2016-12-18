@@ -1,95 +1,68 @@
 
-const SessionLock = require('./session_lock.js');
 const SessionRecord = require('./session_record.js');
 const BaseKeyType = require('./base_key_type.js');
 const ChainType = require('./chain_type.js');
 const crypto = require('./crypto.js');
 
 
-function SessionBuilder(storage, remoteAddress) {
-  this.remoteAddress = remoteAddress;
-  this.storage = storage;
-}
+class SessionBuilder {
 
-SessionBuilder.prototype = {
-  processPreKey: function(device) {
-    return SessionLock.queueJobForNumber(this.remoteAddress.toString(), function() {
-      return this.storage.isTrustedIdentity(
-          this.remoteAddress.getName(), device.identityKey
-      ).then(function(trusted) {
+    constructor(storage, remoteAddress) {
+        this.remoteAddress = remoteAddress;
+        this.storage = storage;
+    }
+
+    async processPreKey(device) {
+        const trusted = await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
+                                                             device.identityKey);
         if (!trusted) {
-          throw new Error('Identity key changed');
+            throw new Error('Identity key changed');
         }
-
-        return crypto.Ed25519Verify(
-          device.identityKey,
-          device.signedPreKey.publicKey,
-          device.signedPreKey.signature
-        );
-      }).then(function() {
-        return crypto.createKeyPair();
-      }).then(function(baseKey) {
-        var devicePreKey = (device.preKey.publicKey);
-        return this.initSession(true, baseKey, undefined, device.identityKey,
-          devicePreKey, device.signedPreKey.publicKey
-        ).then(function(session) {
-            session.pendingPreKey = {
-                preKeyId: device.preKey.keyId,
-                signedKeyId: device.signedPreKey.keyId,
-                baseKey: baseKey.pubKey
-            };
-            return session;
-        });
-      }.bind(this)).then(function(session) {
-        var address = this.remoteAddress.toString();
-        return this.storage.loadSession(address).then(function(serialized) {
-          var record;
-          console.log("WARNING: Forcing fresh session!!!!!!!!");
-          serialized = undefined;
-          if (serialized !== undefined) {
+        crypto.Ed25519Verify(device.identityKey, device.signedPreKey.publicKey,
+                             device.signedPreKey.signature);
+        const baseKey = crypto.createKeyPair();
+        const devicePreKey = (device.preKey.publicKey);
+        const session = await this.initSession(true, baseKey, undefined, device.identityKey,
+                                               devicePreKey, device.signedPreKey.publicKey);
+        session.pendingPreKey = {
+            preKeyId: device.preKey.keyId,
+            signedKeyId: device.signedPreKey.keyId,
+            baseKey: baseKey.pubKey
+        };
+        const address = this.remoteAddress.toString();
+        const serialized = await this.storage.loadSession(address);
+        let record;
+        console.log("WARNING: Forcing fresh session!!!!!!!!");
+        serialized = undefined;
+        if (serialized !== undefined) {
             record = SessionRecord.deserialize(serialized);
-          } else {
+        } else {
             record = new SessionRecord(device.identityKey, device.registrationId);
-          }
+        }
+        record.archiveCurrentState();
+        record.updateSessionState(session, device.registrationId);
+        await this.storage.storeSession(address, record.serialize());
+        await this.storage.saveIdentity(this.remoteAddress.getName(), record.identityKey);
+    }
 
-          record.archiveCurrentState();
-          record.updateSessionState(session, device.registrationId);
-          return Promise.all([
-            this.storage.storeSession(address, record.serialize()),
-            this.storage.saveIdentity(this.remoteAddress.getName(), record.identityKey)
-          ]);
-        }.bind(this));
-      }.bind(this));
-    }.bind(this));
-  },
-  processV3: function(record, message) {
-    var preKeyPair, signedPreKeyPair, session;
-    return this.storage.isTrustedIdentity(
-        this.remoteAddress.getName(), message.identityKey
-    ).then(function(trusted) {
+    async processV3(record, message) {
+        const trusted = await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
+                                                             message.identityKey);
         if (!trusted) {
             var e = new Error('Unknown identity key');
             e.identityKey = message.identityKey;
             throw e;
         }
-        return Promise.all([
-            this.storage.loadPreKey(message.preKeyId),
-            this.storage.loadSignedPreKey(message.signedPreKeyId),
-        ]).then(function(results) {
-            preKeyPair       = results[0];
-            signedPreKeyPair = results[1];
-        });
-    }.bind(this)).then(function() {
-        session = record.getSessionByBaseKey(message.baseKey);
+        const preKeyPair = await this.storage.loadPreKey(message.preKeyId);
+        const signedPreKeyPair = await this.storage.loadSignedPreKey(message.signedPreKeyId);
+        let session = record.getSessionByBaseKey(message.baseKey);
         if (session) {
           console.log("Duplicate PreKeyMessage for session");
           return;
         }
-
         session = record.getOpenSession();
-
         if (signedPreKeyPair === undefined) {
-            // Session may or may not be the right one, but if its not, we
+            // Session may or may not be the right one, but if it's not, we
             // can't do anything about it ...fall through and let
             // decryptWhisperMessage handle that case
             if (session !== undefined && session.currentRatchet !== undefined) {
@@ -98,32 +71,25 @@ SessionBuilder.prototype = {
                 throw new Error("Missing Signed PreKey for PreKeyWhisperMessage");
             }
         }
-
         if (session !== undefined) {
             record.archiveCurrentState();
         }
         if (message.preKeyId && !preKeyPair) {
             console.log('Invalid prekey id', message.preKeyId);
         }
-        return this.initSession(false, preKeyPair, signedPreKeyPair,
-            message.identityKey, message.baseKey, undefined
-        ).then(function(new_session) {
-            // Note that the session is not actually saved until the very
-            // end of decryptWhisperMessage ... to ensure that the sender
-            // actually holds the private keys for all reported pubkeys
-            record.updateSessionState(new_session, message.registrationId);
-            return this.storage.saveIdentity(this.remoteAddress.getName(), message.identityKey).then(function() {
+        const new_session = await this.initSession(false, preKeyPair, signedPreKeyPair,
+                                                   message.identityKey, message.baseKey);
+        // Note that the session is not actually saved until the very
+        // end of decryptWhisperMessage ... to ensure that the sender
+        // actually holds the private keys for all reported pubkeys
+        record.updateSessionState(new_session, message.registrationId);
+        await this.storage.saveIdentity(this.remoteAddress.getName(), message.identityKey);
+        return message.preKeyId;
+    }
 
-              return message.preKeyId;
-            });
-        }.bind(this));
-    }.bind(this));
-  },
-
-  initSession: function(isInitiator, ourEphemeralKey, ourSignedKey,
-                   theirIdentityPubKey, theirEphemeralPubKey,
-                   theirSignedPubKey) {
-    return this.storage.getIdentityKeyPair().then(function(ourIdentityKey) {
+    async initSession(isInitiator, ourEphemeralKey, ourSignedKey, theirIdentityPubKey,
+              theirEphemeralPubKey, theirSignedPubKey) {
+        const ourIdentityKey = await this.storage.getIdentityKeyPair();
         if (isInitiator) {
             if (ourSignedKey !== undefined) {
                 throw new Error("Invalid call to initSession");
@@ -135,97 +101,75 @@ SessionBuilder.prototype = {
             }
             theirSignedPubKey = theirEphemeralPubKey;
         }
-
-        var sharedSecret;
+        let sharedSecret;
         if (ourEphemeralKey === undefined || theirEphemeralPubKey === undefined) {
             sharedSecret = new Uint8Array(32 * 4);
         } else {
             sharedSecret = new Uint8Array(32 * 5);
         }
-
         for (var i = 0; i < 32; i++) {
             sharedSecret[i] = 0xff;
         }
+        const a1 = crypto.calculateAgreement(theirSignedPubKey, ourIdentityKey.privKey);
+        const a2 = crypto.calculateAgreement(theirIdentityPubKey, ourSignedKey.privKey);
+        const a3 = crypto.calculateAgreement(theirSignedPubKey, ourSignedKey.privKey);
+        if (isInitiator) {
+            sharedSecret.set(new Uint8Array(a1), 32);
+            sharedSecret.set(new Uint8Array(a2), 32 * 2);
+        } else {
+            sharedSecret.set(new Uint8Array(a1), 32 * 2);
+            sharedSecret.set(new Uint8Array(a2), 32);
+        }
+        sharedSecret.set(new Uint8Array(a3), 32 * 3);
+        if (ourEphemeralKey !== undefined && theirEphemeralPubKey !== undefined) {
+            const a4 = crypto.calculateAgreement(theirEphemeralPubKey, ourEphemeralKey.privKey);
+            sharedSecret.set(new Uint8Array(a4), 32 * 4);
+        }
+        const masterKey = crypto.HKDF(Buffer.from(sharedSecret), Buffer.alloc(32),
+                                      Buffer.from("WhisperText"));
+        const session = {
+            currentRatchet: {
+                rootKey                : masterKey[0],
+                lastRemoteEphemeralKey : theirSignedPubKey,
+                previousCounter        : 0
+            },
+            indexInfo: {
+                remoteIdentityKey : theirIdentityPubKey,
+                closed            : -1
+            },
+            oldRatchetList: []
+        };
 
-        return Promise.all([
-            crypto.calculateAgreement(theirSignedPubKey, ourIdentityKey.privKey),
-            crypto.calculateAgreement(theirIdentityPubKey, ourSignedKey.privKey),
-            crypto.calculateAgreement(theirSignedPubKey, ourSignedKey.privKey)
-        ]).then(function(ecRes) {
-            if (isInitiator) {
-                sharedSecret.set(new Uint8Array(ecRes[0]), 32);
-                sharedSecret.set(new Uint8Array(ecRes[1]), 32 * 2);
-            } else {
-                sharedSecret.set(new Uint8Array(ecRes[0]), 32 * 2);
-                sharedSecret.set(new Uint8Array(ecRes[1]), 32);
-            }
-            sharedSecret.set(new Uint8Array(ecRes[2]), 32 * 3);
+        // If we're initiating we go ahead and set our first sending ephemeral key now,
+        // otherwise we figure it out when we first maybeStepRatchet with the remote's ephemeral key
+        if (isInitiator) {
+            session.indexInfo.baseKey = ourEphemeralKey.pubKey;
+            session.indexInfo.baseKeyType = BaseKeyType.OURS;
+            session.currentRatchet.ephemeralKeyPair = crypto.createKeyPair();
+            this.calculateSendingRatchet(session, theirSignedPubKey);
+            return session;
+        } else {
+            session.indexInfo.baseKey = theirEphemeralPubKey;
+            session.indexInfo.baseKeyType = BaseKeyType.THEIRS;
+            session.currentRatchet.ephemeralKeyPair = ourSignedKey;
+            return session;
+        }
+    }
 
-            if (ourEphemeralKey !== undefined && theirEphemeralPubKey !== undefined) {
-                return crypto.calculateAgreement(
-                    theirEphemeralPubKey, ourEphemeralKey.privKey
-                ).then(function(ecRes4) {
-                    sharedSecret.set(new Uint8Array(ecRes4), 32 * 4);
-                });
-            }
-        }).then(function() {
-            return crypto.HKDF(Buffer.from(sharedSecret), Buffer.alloc(32), Buffer.from("WhisperText"));
-        }).then(function(masterKey) {
-            var session = {
-                currentRatchet: {
-                    rootKey                : masterKey[0],
-                    lastRemoteEphemeralKey : theirSignedPubKey,
-                    previousCounter        : 0
-                },
-                indexInfo: {
-                    remoteIdentityKey : theirIdentityPubKey,
-                    closed            : -1
-                },
-                oldRatchetList: []
-            };
-
-            // If we're initiating we go ahead and set our first sending ephemeral key now,
-            // otherwise we figure it out when we first maybeStepRatchet with the remote's ephemeral key
-            if (isInitiator) {
-                session.indexInfo.baseKey = ourEphemeralKey.pubKey;
-                session.indexInfo.baseKeyType = BaseKeyType.OURS;
-                return crypto.createKeyPair().then(function(ourSendingEphemeralKey) {
-                    session.currentRatchet.ephemeralKeyPair = ourSendingEphemeralKey;
-                    return this.calculateSendingRatchet(session, theirSignedPubKey).then(function() {
-                        return session;
-                    });
-                }.bind(this));
-            } else {
-                session.indexInfo.baseKey = theirEphemeralPubKey;
-                session.indexInfo.baseKeyType = BaseKeyType.THEIRS;
-                session.currentRatchet.ephemeralKeyPair = ourSignedKey;
-                return session;
-            }
-        }.bind(this));
-    }.bind(this));
-  },
-  calculateSendingRatchet: function(session, remoteKey) {
-      var ratchet = session.currentRatchet;
-      return crypto.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey)
-        .then(function(sharedSecret) {
-          return crypto.HKDF(sharedSecret, ratchet.rootKey, "WhisperRatchet");
-      }).then(function(masterKey) {
+    calculateSendingRatchet(session, remoteKey) {
+        var ratchet = session.currentRatchet;
+        const sharedSecret = crypto.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey);
+        const masterKey = crypto.HKDF(sharedSecret, ratchet.rootKey, Buffer.from("WhisperRatchet"));
         session[ratchet.ephemeralKeyPair.pubKey.toString('base64')] = {
-          messageKeys: {},
-          chainKey: {
-            counter: -1,
-            key: masterKey[1]
-          },
-          chainType: ChainType.SENDING
+            messageKeys: {},
+            chainKey: {
+                counter: -1,
+                key: masterKey[1]
+            },
+            chainType: ChainType.SENDING
         };
         ratchet.rootKey = masterKey[0];
-      });
-  }
+    }
+}
 
-};
-
-module.exports = function (storage, remoteAddress) {
-  var builder = new SessionBuilder(storage, remoteAddress);
-  this.processPreKey = builder.processPreKey.bind(builder);
-  this.processV3 = builder.processV3.bind(builder);
-};
+module.exports = SessionBuilder;

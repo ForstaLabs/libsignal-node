@@ -17,7 +17,7 @@ var KeyHelper = {
         return registrationId & 0x3fff;
     },
 
-    generateSignedPreKey: async function (identityKeyPair, signedKeyId) {
+    generateSignedPreKey: function (identityKeyPair, signedKeyId) {
         if (!(identityKeyPair.privKey instanceof Buffer) ||
             identityKeyPair.privKey.byteLength != 32 ||
             !(identityKeyPair.pubKey instanceof Buffer) ||
@@ -27,9 +27,9 @@ var KeyHelper = {
         if (!isNonNegativeInteger(signedKeyId)) {
             throw new TypeError('Invalid argument for signedKeyId: ' + signedKeyId);
         }
-        const keyPair = await crypto.createKeyPair();
-        const sig = await crypto.calculateSignature(identityKeyPair.privKey,
-                                                    keyPair.pubKey);
+        const keyPair = crypto.createKeyPair();
+        const sig = crypto.calculateSignature(identityKeyPair.privKey,
+                                              keyPair.pubKey);
         return {
             keyId: signedKeyId,
             keyPair: keyPair,
@@ -37,12 +37,15 @@ var KeyHelper = {
         };
     },
 
-    generatePreKey: async function(keyId) {
+    generatePreKey: function(keyId) {
         if (!isNonNegativeInteger(keyId)) {
             throw new TypeError('Invalid argument for keyId: ' + keyId);
         }
-        const keyPair = await crypto.createKeyPair();
-        return { keyId: keyId, keyPair: keyPair };
+        const keyPair = crypto.createKeyPair();
+        return {
+            keyId,
+            keyPair
+        };
     }
 };
 

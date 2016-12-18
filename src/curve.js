@@ -46,15 +46,9 @@ function processKeys(raw_keys) {
 
 function wrapCurve25519(curve) {
     return {
-        // Curve 25519 crypto
         createKeyPair: function(privKey) {
             validatePrivKey(privKey);
-            var raw_keys = curve.keyPair(privKey);
-            if (raw_keys instanceof Promise) {
-                return raw_keys.then(processKeys);
-            } else {
-                return processKeys(raw_keys);
-            }
+            return processKeys(curve.keyPair(privKey));
         },
         ECDHE: function(pubKey, privKey) {
             pubKey = validatePubKeyFormat(pubKey);
@@ -63,47 +57,32 @@ function wrapCurve25519(curve) {
             if (pubKey === undefined || pubKey.byteLength != 32) {
                 throw new Error("Invalid public key");
             }
-            const secret = curve.sharedSecret(pubKey, privKey);
-            if (secret instanceof Promise) {
-                return secret.then(Buffer.from);
-            } else {
-                return Buffer.from(secret);
-            }
+            return Buffer.from(curve.sharedSecret(pubKey, privKey));
         },
         Ed25519Sign: function(privKey, message) {
             validatePrivKey(privKey);
             if (message === undefined) {
                 throw new Error("Invalid message");
             }
-            const raw_sig = curve.sign(privKey, message);
-            if (raw_sig instanceof Promise) {
-                return raw_sig.then(Buffer.from);
-            } else {
-                return Buffer.from(raw_keys);
-            }
+            return Buffer.from(curve.sign(privKey, message));
         },
         Ed25519Verify: function(pubKey, msg, sig) {
             pubKey = validatePubKeyFormat(pubKey);
-
             if (pubKey === undefined || pubKey.byteLength != 32) {
                 throw new Error("Invalid public key");
             }
-
             if (msg === undefined) {
                 throw new Error("Invalid message");
             }
-
             if (sig === undefined || sig.byteLength != 64) {
                 throw new Error("Invalid signature");
             }
-
             return curve.verify(pubKey, msg, sig);
         }
     };
 }
 
 const Curve = wrapCurve25519(curve25519);
-Curve.async = wrapCurve25519(curve25519.async);
 
 function wrapCurve(curve) {
     return {
@@ -129,4 +108,3 @@ function wrapCurve(curve) {
 }
 
 module.exports = wrapCurve(Curve);
-module.exports.async = wrapCurve(Curve.async);
