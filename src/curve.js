@@ -63,8 +63,12 @@ function wrapCurve25519(curve) {
             if (pubKey === undefined || pubKey.byteLength != 32) {
                 throw new Error("Invalid public key");
             }
-
-            return curve.sharedSecret(pubKey, privKey);
+            const secret = curve.sharedSecret(pubKey, privKey);
+            if (secret instanceof Promise) {
+                return secret.then(Buffer.from);
+            } else {
+                return Buffer.from(secret);
+            }
         },
         Ed25519Sign: function(privKey, message) {
             validatePrivKey(privKey);

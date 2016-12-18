@@ -78,7 +78,7 @@ async function HKDF(input, salt, info) {
 
 async function verifyMAC(data, key, mac, length) {
     const calculated_mac = await sign(key, data);
-    if (mac.byteLength != length  || calculated_mac.byteLength < length) {
+    if (mac.byteLength != length || calculated_mac.byteLength < length) {
         throw new Error("Bad MAC length");
     }
     var a = new Uint8Array(calculated_mac.slice(0, length));
@@ -103,7 +103,7 @@ function getRandomBytes(len) {
 
 function createKeyPair(privKey) {
     if (privKey === undefined) {
-        privKey = node_crypto.randomBytes(32); // XXX this may actually need to be an ArrayBuffer.
+        privKey = node_crypto.randomBytes(32);
     }
     return curve.async.createKeyPair(privKey);
 }

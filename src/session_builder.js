@@ -4,7 +4,6 @@ const SessionRecord = require('./session_record.js');
 const BaseKeyType = require('./base_key_type.js');
 const ChainType = require('./chain_type.js');
 const crypto = require('./crypto.js');
-const helpers = require('./helpers.js');
 
 
 function SessionBuilder(storage, remoteAddress) {
@@ -35,9 +34,9 @@ SessionBuilder.prototype = {
           devicePreKey, device.signedPreKey.publicKey
         ).then(function(session) {
             session.pendingPreKey = {
-                preKeyId    : device.preKey.keyId,
-                signedKeyId : device.signedPreKey.keyId,
-                baseKey     : baseKey.pubKey
+                preKeyId: device.preKey.keyId,
+                signedKeyId: device.signedPreKey.keyId,
+                baseKey: baseKey.pubKey
             };
             return session;
         });
@@ -66,11 +65,11 @@ SessionBuilder.prototype = {
   processV3: function(record, message) {
     var preKeyPair, signedPreKeyPair, session;
     return this.storage.isTrustedIdentity(
-        this.remoteAddress.getName(), message.identityKey.toArrayBuffer()
+        this.remoteAddress.getName(), message.identityKey
     ).then(function(trusted) {
         if (!trusted) {
             var e = new Error('Unknown identity key');
-            e.identityKey = message.identityKey.toArrayBuffer();
+            e.identityKey = message.identityKey;
             throw e;
         }
         return Promise.all([
@@ -107,14 +106,13 @@ SessionBuilder.prototype = {
             console.log('Invalid prekey id', message.preKeyId);
         }
         return this.initSession(false, preKeyPair, signedPreKeyPair,
-            message.identityKey.toArrayBuffer(),
-            message.baseKey.toArrayBuffer(), undefined
+            message.identityKey, message.baseKey, undefined
         ).then(function(new_session) {
             // Note that the session is not actually saved until the very
             // end of decryptWhisperMessage ... to ensure that the sender
             // actually holds the private keys for all reported pubkeys
             record.updateSessionState(new_session, message.registrationId);
-            return this.storage.saveIdentity(this.remoteAddress.getName(), message.identityKey.toArrayBuffer()).then(function() {
+            return this.storage.saveIdentity(this.remoteAddress.getName(), message.identityKey).then(function() {
 
               return message.preKeyId;
             });
@@ -171,7 +169,7 @@ SessionBuilder.prototype = {
                 });
             }
         }).then(function() {
-            return crypto.HKDF(sharedSecret.buffer, new ArrayBuffer(32), "WhisperText");
+            return crypto.HKDF(Buffer.from(sharedSecret), Buffer.alloc(32), Buffer.from("WhisperText"));
         }).then(function(masterKey) {
             var session = {
                 currentRatchet: {
@@ -208,21 +206,19 @@ SessionBuilder.prototype = {
   },
   calculateSendingRatchet: function(session, remoteKey) {
       var ratchet = session.currentRatchet;
-
-      return crypto.calculateAgreement(
-          remoteKey, helpers.toArrayBuffer(ratchet.ephemeralKeyPair.privKey)
-      ).then(function(sharedSecret) {
-            // XXX
-          return crypto.HKDF(
-              sharedSecret, helpers.toArrayBuffer(ratchet.rootKey), "WhisperRatchet"
-          );
+      return crypto.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey)
+        .then(function(sharedSecret) {
+          return crypto.HKDF(sharedSecret, ratchet.rootKey, "WhisperRatchet");
       }).then(function(masterKey) {
-          session[helpers.toString(ratchet.ephemeralKeyPair.pubKey)] = {
-              messageKeys : {},
-              chainKey    : { counter : -1, key : masterKey[1] },
-              chainType   : ChainType.SENDING
-          };
-          ratchet.rootKey = masterKey[0];
+        session[ratchet.ephemeralKeyPair.pubKey.toString('base64')] = {
+          messageKeys: {},
+          chainKey: {
+            counter: -1,
+            key: masterKey[1]
+          },
+          chainType: ChainType.SENDING
+        };
+        ratchet.rootKey = masterKey[0];
       });
   }
 
