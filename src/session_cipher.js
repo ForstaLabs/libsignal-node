@@ -205,7 +205,6 @@ class SessionCipher {
          var messageProto = messageBytes.slice(1, messageBytes.byteLength - 8);
          var mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
          var message = protobufs.WhisperMessage.decode(messageProto);
-         assert_buffer(message.ephemeralKey); // XXX remove once verified
          if (session.indexInfo.closed != -1) {
             console.log('decrypting message for closed session');
          }
