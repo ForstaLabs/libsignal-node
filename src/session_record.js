@@ -33,7 +33,9 @@ class SessionRecord {
             cr.rootKey = Buffer.from(cr.rootKey, 'base64');
             cr.lastRemoteEphemeralKey = Buffer.from(cr.lastRemoteEphemeralKey, 'base64');
             s.indexInfo.remoteIdentityKey = Buffer.from(s.indexInfo.remoteIdentityKey, 'base64');
+            s.indexInfo.baseKey = Buffer.from(s.indexInfo.baseKey, 'base64');
         }
+        debugger;
         var record = new SessionRecord(data.identityKey, data.registrationId);
         record._sessions = data.sessions;
         return record;
@@ -50,12 +52,14 @@ class SessionRecord {
             dst.currentRatchet.ephemeralKeyPair.pubKey = ekp.pubKey.toString('base64');
             dst.currentRatchet.ephemeralKeyPair.privKey = ekp.privKey.toString('base64');
             dst.indexInfo.remoteIdentityKey = src.indexInfo.remoteIdentityKey.toString('base64');
+            dst.indexInfo.baseKey = src.indexInfo.baseKey.toString('base64');
             return dst;
         }.bind(this));
+        debugger;
         return {
             sessions,
             registrationId: this.registrationId,
-            identityKey: this.identityKey.toString('binary')
+            identityKey: this.identityKey.toString('base64')
         };
     }
 
@@ -96,15 +100,13 @@ class SessionRecord {
         if (sessions === undefined) {
             return undefined;
         }
-
         this.detectDuplicateOpenSessions();
-
         for (var key in sessions) {
             if (sessions[key].indexInfo.closed == -1) {
                 return sessions[key];
             }
         }
-        return undefined;
+        return;
     }
 
     detectDuplicateOpenSessions() {
@@ -128,8 +130,9 @@ class SessionRecord {
         if (this.identityKey === null) {
             this.identityKey = session.indexInfo.remoteIdentityKey;
         }
-        if (this.identityKey.toString('binary') !==
-            session.indexInfo.remoteIdentityKey.toString('binary')) {
+        if (!this.identityKey.equals(session.indexInfo.remoteIdentityKey)) {
+            console.log(this.identityKey);
+            console.log(session.indexInfo.remoteIdentityKey);
             var e = new Error("Identity key changed at session save time");
             e.identityKey = session.indexInfo.remoteIdentityKey;
             throw e;
