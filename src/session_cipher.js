@@ -21,6 +21,7 @@ class SessionCipher {
     constructor(storage, remoteAddress) {
         this.remoteAddress = remoteAddress;
         this.storage = storage;
+        this.ourIdentityKey = this.storage.getIdentityKeyPair();
     }
 
     async getRecord(encodedNumber) {
@@ -38,18 +39,16 @@ class SessionCipher {
           throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
         }
         var address = this.remoteAddress.toString();
-        var ourIdentityKey, myRegistrationId, record, session, chain;
+        var myRegistrationId, record, session, chain;
 
         var msg = new protobufs.WhisperMessage();
 
         return Promise.all([
-            this.storage.getIdentityKeyPair(),
             this.storage.getLocalRegistrationId(),
             this.getRecord(address)
         ]).then(function(results) {
-            ourIdentityKey   = results[0];
-            myRegistrationId = results[1];
-            record           = results[2];
+            myRegistrationId = results[0];
+            record           = results[1];
             if (!record) {
                 throw new Error("No record for " + address);
             }
@@ -78,7 +77,7 @@ class SessionCipher {
                 var encodedMsg = msg;
 
                 var macInput = new Uint8Array(encodedMsg.byteLength + 33*2 + 1);
-                macInput.set(ourIdentityKey.pubKey);
+                macInput.set(this.ourIdentityKey.pubKey);
                 macInput.set(session.indexInfo.remoteIdentityKey, 33);
                 macInput[33*2] = (3 << 4) | 3;
                 macInput.set(encodedMsg, 33*2 + 1);
@@ -96,7 +95,7 @@ class SessionCipher {
         }.bind(this)).then(function(message) {
             if (session.pendingPreKey !== undefined) {
                 var preKeyMsg = new protobufs.PreKeyWhisperMessage();
-                preKeyMsg.identityKey = ourIdentityKey.pubKey;
+                preKeyMsg.identityKey = this.ourIdentityKey.pubKey;
                 preKeyMsg.registrationId = myRegistrationId;
 
                 preKeyMsg.baseKey = session.pendingPreKey.baseKey;
@@ -152,7 +151,7 @@ class SessionCipher {
         }
         const errors = [];
         const result = await this.decryptWithSessionList(buffer, record.getSessions(), errors);
-        const record2 = this.getRecord(address); // XXX Why!?
+        const record2 = await this.getRecord(address); // XXX Why!?
         record2.updateSessionState(result.session);
         await this.storage.storeSession(address, record2.serialize());
         return result.plaintext;
@@ -223,10 +222,9 @@ class SessionCipher {
          delete chain.messageKeys[message.counter];
          const keys = crypto.HKDF(messageKey, Buffer.alloc(32),
                                   Buffer.from("WhisperMessageKeys"));
-         const ourIdentityKey = await this.storage.getIdentityKeyPair();
          var macInput = new Uint8Array(messageProto.byteLength + (33 * 2) + 1);
          macInput.set(session.indexInfo.remoteIdentityKey);
-         macInput.set(ourIdentityKey.pubKey, 33);
+         macInput.set(this.ourIdentityKey.pubKey, 33);
          macInput[33*2] = (3 << 4) | 3;
          macInput.set(messageProto, 33*2 + 1);
          crypto.verifyMAC(Buffer.from(macInput), keys[1], mac, 8);

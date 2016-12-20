@@ -92,7 +92,6 @@ function verifyMAC(data, key, mac, length) {
     if (result !== 0) {
         console.log('Our MAC  ', a);
         console.log('Their MAC', b);
-        debugger;
         throw new Error("Bad MAC");
     }
 }

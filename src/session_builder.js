@@ -89,7 +89,7 @@ class SessionBuilder {
 
     async initSession(isInitiator, ourEphemeralKey, ourSignedKey, theirIdentityPubKey,
               theirEphemeralPubKey, theirSignedPubKey) {
-        const ourIdentityKey = await this.storage.getIdentityKeyPair();
+        const ourIdentityKey = this.storage.getIdentityKeyPair();
         if (isInitiator) {
             if (ourSignedKey !== undefined) {
                 throw new Error("Invalid call to initSession");
