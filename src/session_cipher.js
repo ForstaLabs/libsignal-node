@@ -21,7 +21,7 @@ class SessionCipher {
     constructor(storage, remoteAddress) {
         this.remoteAddress = remoteAddress;
         this.storage = storage;
-        this.ourIdentityKey = this.storage.getIdentityKeyPair();
+        this.ourIdentityKey = this.storage.getLocalIdentityKeyPair();
     }
 
     async getRecord(encodedNumber) {
