@@ -10,7 +10,54 @@ const BaseKeyType = require('./base_key_type.js');
 const MESSAGE_LOST_THRESHOLD_MS = 1000*60*60*24*7;
 
 
+class SessionEntry {
+
+    constructor() {
+        this._chains = {};
+    }
+
+    addChain(key, value) {
+        if (!Buffer.isBuffer(key)) {
+            throw new TypeError("Buffer Type Required");
+        }
+        const id = key.toString('base64');
+        if (this._chains.hasOwnProperty(id)) {
+            throw new Error("maybe okay, but blowing for now! overwrite attempt");
+        }
+        this._chains[id] = value;
+    }
+    
+    getChain(key) {
+        if (!Buffer.isBuffer(key)) {
+            throw new TypeError("Buffer Type Required");
+        }
+        return this._chains[key.toString('base64')];
+    }
+
+    deleteChain(key) {
+        if (!Buffer.isBuffer(key)) {
+            throw new TypeError("Buffer Type Required");
+        }
+        const id = key.toString('base64');
+        if (!this._chains.hasOwnProperty(id)) {
+            throw new Error("Not Found");
+        }
+        delete this._chains[id];
+    }
+
+    *chains() {
+        for (const [k, v] of Object.entries(this._chains)) {
+            yield [Buffer.from(k, 'base64'), v];
+        }
+    }
+}
+
+
 class SessionRecord {
+
+    static createEntry() {
+        return new SessionEntry();
+    }
 
     constructor(identityKey, registrationId) {
         this._sessions = {};
@@ -20,47 +67,10 @@ class SessionRecord {
         this.identityKey = identityKey;
         this.registrationId = registrationId;
 
-        if (this.registrationId === undefined || typeof this.registrationId !== 'number') {
+        if (this.registrationId === undefined ||
+            typeof this.registrationId !== 'number') {
             this.registrationId = null;
         }
-    }
-
-    static deserialize(data) {
-        data.identityKey = Buffer.from(data.identityKey, 'base64');
-        for (const x of Object.keys(data.sessions)) {
-            let s = data.sessions[x];
-            let cr = s.currentRatchet;
-            cr.rootKey = Buffer.from(cr.rootKey, 'base64');
-            cr.lastRemoteEphemeralKey = Buffer.from(cr.lastRemoteEphemeralKey, 'base64');
-            s.indexInfo.remoteIdentityKey = Buffer.from(s.indexInfo.remoteIdentityKey, 'base64');
-            s.indexInfo.baseKey = Buffer.from(s.indexInfo.baseKey, 'base64');
-        }
-        debugger;
-        var record = new SessionRecord(data.identityKey, data.registrationId);
-        record._sessions = data.sessions;
-        return record;
-    };
-
-    serialize() {
-        const sessions = Object.keys(this._sessions).map(function(x) {
-            let src = this._sessions[x];
-            let dst = JSON.parse(JSON.stringify(src)); // deep copy sans-buffers
-            let cr = src.currentRatchet;
-            let ekp = cr.ephemeralKeyPair;
-            dst.currentRatchet.rootKey = cr.rootKey.toString('base64');
-            dst.currentRatchet.lastRemoteEphemeralKey = cr.lastRemoteEphemeralKey.toString('base64');
-            dst.currentRatchet.ephemeralKeyPair.pubKey = ekp.pubKey.toString('base64');
-            dst.currentRatchet.ephemeralKeyPair.privKey = ekp.privKey.toString('base64');
-            dst.indexInfo.remoteIdentityKey = src.indexInfo.remoteIdentityKey.toString('base64');
-            dst.indexInfo.baseKey = src.indexInfo.baseKey.toString('base64');
-            return dst;
-        }.bind(this));
-        debugger;
-        return {
-            sessions,
-            registrationId: this.registrationId,
-            identityKey: this.identityKey.toString('base64')
-        };
     }
 
     haveOpenSession() {
@@ -71,28 +81,24 @@ class SessionRecord {
         var session = this._sessions[baseKey.toString('base64')];
         if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
             console.log("Tried to lookup a session using our basekey");
-            return undefined;
+            return;
         }
         return session;
     }
 
     getSessionByRemoteEphemeralKey(remoteEphemeralKey) {
         this.detectDuplicateOpenSessions();
-        var sessions = this._sessions;
-        var searchKey = remoteEphemeralKey.toString('base64');
-        var openSession;
-        for (var key in sessions) {
-            if (sessions[key].indexInfo.closed == -1) {
-                openSession = sessions[key];
+        let openSession;
+        for (const key in this._sessions) {
+            const s = this._sessions[key];
+            if (s.getChain(remoteEphemeralKey) !== undefined) {
+                return s;
             }
-            if (sessions[key][searchKey] !== undefined) {
-                return sessions[key];
+            if (s.indexInfo.closed == -1) {
+                openSession = s;
             }
         }
-        if (openSession !== undefined) {
-            return openSession;
-        }
-        return;
+        return openSession;
     }
 
     getOpenSession() {
@@ -196,14 +202,14 @@ class SessionRecord {
         // were already open (unless we know we dont need them),
         // but we cannot send messages or step the ratchet
 
-        // Delete current sending ratchet
-        delete session[session.currentRatchet.ephemeralKeyPair.pubKey.toString('base64')];
+        session.deleteChain(session.currentRatchet.ephemeralKeyPair.pubKey);
         // Move all receive ratchets to the oldRatchetList to mark them for deletion
-        for (var i in session) {
-            if (session[i].chainKey !== undefined && session[i].chainKey.key !== undefined) {
+        for (const [key, chain] of session.chains()) {
+            if (chain.chainKey !== undefined &&
+                chain.chainKey.key !== undefined) {
                 session.oldRatchetList[session.oldRatchetList.length] = {
                     added: Date.now(),
-                    ephemeralKey: i
+                    ephemeralKey: Buffer.from(key, 'base64')
                 };
             }
         }
@@ -225,7 +231,7 @@ class SessionRecord {
                 }
             }
             console.log("Deleting chain closed at", oldest.added);
-            delete session[oldest.ephemeralKey.toString('base64')];
+            session.deleteChain(oldest.ephemeralKey);
             session.oldRatchetList.splice(index, 1);
         }
     }

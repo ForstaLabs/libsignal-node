@@ -78,9 +78,10 @@ function HKDF(input, salt, info) {
 
 function verifyMAC(data, key, mac, length) {
     const calculated_mac = sign(key, data);
-    if (mac.byteLength != length || calculated_mac.byteLength < length) {
+    if (mac.length != length || calculated_mac.length < length) {
         throw new Error("Bad MAC length");
     }
+    const altresult = mac.equals(calculated_mac.slice(0, mac.length));
     var a = new Uint8Array(calculated_mac.slice(0, length));
     var b = new Uint8Array(mac);
     var result = 0;
@@ -88,6 +89,10 @@ function verifyMAC(data, key, mac, length) {
      * Just throw the error if the intersection is not equal. */
     for (var i=0; i < mac.byteLength; ++i) {
         result = result | (a[i] ^ b[i]);
+    }
+    if ((result === 0) !== altresult) {
+        debugger;
+        throw new Error("WTF?");
     }
     if (result !== 0) {
         console.log('Our MAC  ', a);

@@ -16,6 +16,7 @@ function assert_buffer(value) {
     return value;
 }
 
+
 class SessionCipher {
 
     constructor(storage, remoteAddress) {
@@ -24,12 +25,8 @@ class SessionCipher {
         this.ourIdentityKey = this.storage.getLocalIdentityKeyPair();
     }
 
-    async getRecord(encodedNumber) {
-        const serialized = await this.storage.loadSession(encodedNumber);
-        if (serialized === undefined) {
-            return undefined;
-        }
-        return SessionRecord.deserialize(serialized);
+    getRecord(encodedNumber) {
+        return this.storage.loadSession(encodedNumber);
     }
 
     encrypt(buffer, encoding) {
@@ -45,7 +42,7 @@ class SessionCipher {
 
         return Promise.all([
             this.storage.getLocalRegistrationId(),
-            this.getRecord(address)
+            this.getRecord(address) // XXX is not async anymore
         ]).then(function(results) {
             myRegistrationId = results[0];
             record           = results[1];
@@ -58,7 +55,7 @@ class SessionCipher {
             }
 
             msg.ephemeralKey = session.currentRatchet.ephemeralKeyPair.pubKey;
-            chain = session[msg.ephemeralKey.toString('base64')];
+            chain = session.getChain(msg.ephemeralKey);
             if (chain.chainType === ChainType.RECEIVING) {
                 throw new Error("Tried to encrypt on a receiving chain");
             }
@@ -88,9 +85,8 @@ class SessionCipher {
                 result.set(encodedMsg, 1);
                 result.set(mac.slice(0, 8), encodedMsg.byteLength + 1);
                 record.updateSessionState(session);
-                return this.storage.storeSession(address, record.serialize()).then(function() {
-                    return result;
-                });
+                this.storage.storeSession(address, record);
+                return result;
             }.bind(this));
         }.bind(this)).then(function(message) {
             if (session.pendingPreKey !== undefined) {
@@ -145,15 +141,15 @@ class SessionCipher {
         }
         assert_buffer(buffer);
         const address = this.remoteAddress.toString();
-        const record = await this.getRecord(address);
+        const record = this.getRecord(address);
         if (!record) {
             throw new Error("No record for device " + address);
         }
         const errors = [];
         const result = await this.decryptWithSessionList(buffer, record.getSessions(), errors);
-        const record2 = await this.getRecord(address); // XXX Why!?
+        const record2 = this.getRecord(address); // XXX Why!?
         record2.updateSessionState(result.session);
-        await this.storage.storeSession(address, record2.serialize());
+        this.storage.storeSession(address, record2);
         return result.plaintext;
     }
 
@@ -168,24 +164,23 @@ class SessionCipher {
             throw new Error("Incompatible version number on PreKeyWhisperMessage");
         }
         const address = this.remoteAddress.toString();
-        let record = await this.getRecord(address);
+        let record = this.getRecord(address);
         const preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
         if (!record) {
             if (preKeyProto.registrationId === undefined) {
                 throw new Error("No registrationId");
             }
             console.log(`Creating new session record for: ${address}`);
-            record = new SessionRecord(
-                preKeyProto.identityKey,
-                preKeyProto.registrationId
-            );
+            record = new SessionRecord(preKeyProto.identityKey,
+                                       preKeyProto.registrationId);
         }
         const builder = new SessionBuilder(this.storage, this.remoteAddress);
         const preKeyId = await builder.processV3(record, preKeyProto);
         const session = record.getSessionByBaseKey(preKeyProto.baseKey);
-        const plaintext = await this.doDecryptWhisperMessage(preKeyProto.message, session);
+        const plaintext = await this.doDecryptWhisperMessage(preKeyProto.message,
+                                                             session);
         record.updateSessionState(session);
-        await this.storage.storeSession(address, record.serialize());
+        this.storage.storeSession(address, record);
         if (preKeyId !== undefined) {
             await this.storage.removePreKey(preKeyId);
         }
@@ -208,7 +203,7 @@ class SessionCipher {
             console.log('decrypting message for closed session');
          }
          this.maybeStepRatchet(session, message.ephemeralKey, message.previousCounter);
-         var chain = session[message.ephemeralKey.toString('base64')];
+         var chain = session.getChain(message.ephemeralKey);
          if (chain.chainType === ChainType.SENDING) {
              throw new Error("Tried to decrypt on a sending chain");
          }
@@ -254,12 +249,12 @@ class SessionCipher {
     }
 
     maybeStepRatchet(session, remoteKey, previousCounter) {
-        if (session[remoteKey.toString('base64')] !== undefined) {
+        if (session.getChain(remoteKey) !== undefined) {
             return;
         }
         console.log('New remote ephemeral key');
-        let ratchet = session.currentRatchet;
-        let previousRatchet = session[ratchet.lastRemoteEphemeralKey.toString('base64')];
+        const ratchet = session.currentRatchet;
+        let previousRatchet = session.getChain(ratchet.lastRemoteEphemeralKey);
         if (previousRatchet !== undefined) {
             this.fillMessageKeys(previousRatchet, previousCounter);
             delete previousRatchet.chainKey.key;
@@ -270,10 +265,10 @@ class SessionCipher {
         }
         this.calculateRatchet(session, remoteKey, false);
         // Now swap the ephemeral key and calculate the new sending chain
-        previousRatchet = ratchet.ephemeralKeyPair.pubKey.toString('base64');
-        if (session[previousRatchet] !== undefined) {
-            ratchet.previousCounter = session[previousRatchet].chainKey.counter;
-            delete session[previousRatchet];
+        const prevCounter = session.getChain(ratchet.ephemeralKeyPair.pubKey);
+        if (prevCounter !== undefined) {
+            ratchet.previousCounter = prevCounter.chainKey.counter;
+            session.deleteChain(ratchet.ephemeralKeyPair.pubKey);
         }
         ratchet.ephemeralKeyPair = crypto.createKeyPair();
         this.calculateRatchet(session, remoteKey, true);
@@ -290,41 +285,41 @@ class SessionCipher {
         } else {
             ephemeralPublicKey = remoteKey;
         }
-        session[ephemeralPublicKey.toString('base64')] = {
+        session.addChain(ephemeralPublicKey, {
             messageKeys: {},
             chainKey: {
                 counter: -1,
                 key: masterKey[1]
             },
             chainType: sending ? ChainType.SENDING : ChainType.RECEIVING
-        };
+        });
         ratchet.rootKey = masterKey[0];
     }
 
-    async getRemoteRegistrationId() {
-        const record = await this.getRecord(this.remoteAddress.toString());
+    getRemoteRegistrationId() {
+        const record = this.getRecord(this.remoteAddress.toString());
         if (record === undefined) {
             return undefined;
         }
         return record.registrationId;
     }
 
-    async hasOpenSession() {
-        const record = await this.getRecord(this.remoteAddress.toString());
+    hasOpenSession() {
+        const record = this.getRecord(this.remoteAddress.toString());
         if (record === undefined) {
             return false;
         }
         return record.haveOpenSession();
     }
 
-    async closeOpenSessionForDevice() {
+    closeOpenSessionForDevice() {
         var address = this.remoteAddress.toString();
-        const record = await this.getRecord(address);
+        const record = this.getRecord(address);
         if (record === undefined || record.getOpenSession() === undefined) {
             return;
         }
         record.archiveCurrentState();
-        await this.storage.storeSession(address, record.serialize());
+        this.storage.storeSession(address, record);
     }
 }
 

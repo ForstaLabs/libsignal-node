@@ -5,6 +5,15 @@ const ChainType = require('./chain_type.js');
 const crypto = require('./crypto.js');
 
 
+function assert_buffer(value) {
+    if (!Buffer.isBuffer(value)) {
+        debugger;
+        throw new TypeError(`Buffer type expected, not ` +
+                            `(${value.constructor.name})`);
+    }
+}
+
+
 class SessionBuilder {
 
     constructor(storage, remoteAddress) {
@@ -31,19 +40,18 @@ class SessionBuilder {
             baseKey: baseKey.pubKey
         };
         const address = this.remoteAddress.toString();
-        const serialized = await this.storage.loadSession(address);
-        let record;
-        console.log("WARNING: Forcing fresh session!!!!!!!!");
-        serialized = undefined;
-        if (serialized !== undefined) {
-            record = SessionRecord.deserialize(serialized);
-        } else {
+        let record = this.storage.loadSession(address);
+        if (record === undefined) {
+            console.warn("Created new SessionRecord:", address);
             record = new SessionRecord(device.identityKey, device.registrationId);
+        } else {
+            console.log("Loaded SessionRecord:", address);
         }
         record.archiveCurrentState();
         record.updateSessionState(session, device.registrationId);
-        await this.storage.storeSession(address, record.serialize());
-        await this.storage.saveIdentity(this.remoteAddress.getName(), record.identityKey);
+        this.storage.storeSession(address, record);
+        await this.storage.saveIdentity(this.remoteAddress.getName(),
+                                        record.identityKey);
     }
 
     async processV3(record, message) {
@@ -79,7 +87,8 @@ class SessionBuilder {
             console.log('Invalid prekey id', message.preKeyId);
         }
         const new_session = await this.initSession(false, preKeyPair, signedPreKeyPair,
-                                                   message.identityKey, message.baseKey);
+                                                   message.identityKey, message.baseKey,
+                                                   undefined, message.registrationId);
         // Note that the session is not actually saved until the very
         // end of decryptWhisperMessage ... to ensure that the sender
         // actually holds the private keys for all reported pubkeys
@@ -88,8 +97,9 @@ class SessionBuilder {
         return message.preKeyId;
     }
 
-    async initSession(isInitiator, ourEphemeralKey, ourSignedKey, theirIdentityPubKey,
-              theirEphemeralPubKey, theirSignedPubKey) {
+    async initSession(isInitiator, ourEphemeralKey, ourSignedKey,
+                      theirIdentityPubKey, theirEphemeralPubKey,
+                      theirSignedPubKey, registrationId) {
         if (isInitiator) {
             if (ourSignedKey !== undefined) {
                 throw new Error("Invalid call to initSession");
@@ -127,18 +137,18 @@ class SessionBuilder {
         }
         const masterKey = crypto.HKDF(Buffer.from(sharedSecret), Buffer.alloc(32),
                                       Buffer.from("WhisperText"));
-        const session = {
-            currentRatchet: {
-                rootKey                : masterKey[0],
-                lastRemoteEphemeralKey : theirSignedPubKey,
-                previousCounter        : 0
-            },
-            indexInfo: {
-                remoteIdentityKey : theirIdentityPubKey,
-                closed            : -1
-            },
-            oldRatchetList: []
+        const session = SessionRecord.createEntry();
+        session.registrationId = registrationId;
+        session.currentRatchet = {
+            rootKey: masterKey[0],
+            lastRemoteEphemeralKey: theirSignedPubKey,
+            previousCounter: 0
         };
+        session.indexInfo = {
+            remoteIdentityKey: theirIdentityPubKey,
+            closed: -1
+        };
+        session.oldRatchetList = [];
 
         // If we're initiating we go ahead and set our first sending ephemeral key now,
         // otherwise we figure it out when we first maybeStepRatchet with the remote's ephemeral key
@@ -158,16 +168,18 @@ class SessionBuilder {
 
     calculateSendingRatchet(session, remoteKey) {
         var ratchet = session.currentRatchet;
-        const sharedSecret = crypto.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey);
-        const masterKey = crypto.HKDF(sharedSecret, ratchet.rootKey, Buffer.from("WhisperRatchet"));
-        session[ratchet.ephemeralKeyPair.pubKey.toString('base64')] = {
+        const sharedSecret = crypto.calculateAgreement(remoteKey,
+            ratchet.ephemeralKeyPair.privKey);
+        const masterKey = crypto.HKDF(sharedSecret, ratchet.rootKey,
+            Buffer.from("WhisperRatchet"));
+        session.addChain(ratchet.ephemeralKeyPair.pubKey, {
             messageKeys: {},
             chainKey: {
                 counter: -1,
                 key: masterKey[1]
             },
             chainType: ChainType.SENDING
-        };
+        });
         ratchet.rootKey = masterKey[0];
     }
 }
