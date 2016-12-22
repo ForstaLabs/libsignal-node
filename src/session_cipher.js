@@ -188,44 +188,47 @@ class SessionCipher {
     }
 
     async doDecryptWhisperMessage(messageBytes, session) {
-         assert_buffer(messageBytes);
-         if (session === undefined) {
-             throw new Error(`No session found for: ${this.remoteAddress.toString()}`);
-         }
-         var version = messageBytes[0];
-         if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
-             throw new Error("Incompatible version number on WhisperMessage");
-         }
-         var messageProto = messageBytes.slice(1, messageBytes.byteLength - 8);
-         var mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
-         var message = protobufs.WhisperMessage.decode(messageProto);
-         if (session.indexInfo.closed != -1) {
-            console.log('decrypting message for closed session');
-         }
-         this.maybeStepRatchet(session, message.ephemeralKey, message.previousCounter);
-         var chain = session.getChain(message.ephemeralKey);
-         if (chain.chainType === ChainType.SENDING) {
-             throw new Error("Tried to decrypt on a sending chain");
-         }
-         this.fillMessageKeys(chain, message.counter);
-         const messageKey = chain.messageKeys[message.counter];
-         if (messageKey === undefined) {
-             var e = new Error("Message key not found. The counter was repeated or the key was not filled.");
-             e.name = 'MessageCounterError';
-             throw e;
-         }
-         delete chain.messageKeys[message.counter];
-         const keys = crypto.HKDF(messageKey, Buffer.alloc(32),
-                                  Buffer.from("WhisperMessageKeys"));
-         var macInput = new Uint8Array(messageProto.byteLength + (33 * 2) + 1);
-         macInput.set(session.indexInfo.remoteIdentityKey);
-         macInput.set(this.ourIdentityKey.pubKey, 33);
-         macInput[33*2] = (3 << 4) | 3;
-         macInput.set(messageProto, 33*2 + 1);
-         crypto.verifyMAC(Buffer.from(macInput), keys[1], mac, 8);
-         const plaintext = crypto.decrypt(keys[0], message.ciphertext, keys[2].slice(0, 16));
-         delete session.pendingPreKey;
-         return plaintext;
+        assert_buffer(messageBytes);
+        if (session === undefined) {
+            throw new Error(`No session found for: ${this.remoteAddress.toString()}`);
+        }
+        var version = messageBytes[0];
+        if ((version & 0xF) > 3 || (version >> 4) < 3) {  // min version > 3 or max version < 3
+            throw new Error("Incompatible version number on WhisperMessage");
+        }
+        var messageProto = messageBytes.slice(1, messageBytes.byteLength - 8);
+        var mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
+        var message = protobufs.WhisperMessage.decode(messageProto);
+        if (session.indexInfo.closed != -1) {
+           console.log('decrypting message for closed session');
+        }
+        this.maybeStepRatchet(session, message.ephemeralKey, message.previousCounter);
+        var chain = session.getChain(message.ephemeralKey);
+        if (chain.chainType === ChainType.SENDING) {
+            throw new Error("Tried to decrypt on a sending chain");
+        }
+        this.fillMessageKeys(chain, message.counter);
+        const messageKey = chain.messageKeys[message.counter];
+        console.trace("XXX", message.counter);
+        debugger;
+        if (messageKey === undefined) {
+            console.log("No message key found for counter:", message);
+            var e = new Error(`Message key not found: ${message.counter}`);
+            e.name = 'MessageCounterError';
+            throw e;
+        }
+        delete chain.messageKeys[message.counter];
+        const keys = crypto.HKDF(messageKey, Buffer.alloc(32),
+                                 Buffer.from("WhisperMessageKeys"));
+        var macInput = new Uint8Array(messageProto.byteLength + (33 * 2) + 1);
+        macInput.set(session.indexInfo.remoteIdentityKey);
+        macInput.set(this.ourIdentityKey.pubKey, 33);
+        macInput[33*2] = (3 << 4) | 3;
+        macInput.set(messageProto, 33*2 + 1);
+        crypto.verifyMAC(Buffer.from(macInput), keys[1], mac, 8);
+        const plaintext = crypto.decrypt(keys[0], message.ciphertext, keys[2].slice(0, 16));
+        delete session.pendingPreKey;
+        return plaintext;
     }
 
     fillMessageKeys(chain, counter) {
