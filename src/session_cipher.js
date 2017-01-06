@@ -22,7 +22,6 @@ class SessionCipher {
     constructor(storage, remoteAddress) {
         this.remoteAddress = remoteAddress;
         this.storage = storage;
-        this.ourIdentityKey = this.storage.getLocalIdentityKeyPair();
     }
 
     getRecord(encodedNumber) {
@@ -222,7 +221,8 @@ class SessionCipher {
                                  Buffer.from("WhisperMessageKeys"));
         var macInput = new Uint8Array(messageProto.byteLength + (33 * 2) + 1);
         macInput.set(session.indexInfo.remoteIdentityKey);
-        macInput.set(this.ourIdentityKey.pubKey, 33);
+        const ourIdentityKey = await this.storage.getLocalIdentityKeyPair();
+        macInput.set(ourIdentityKey.pubKey, 33);
         macInput[33*2] = (3 << 4) | 3;
         macInput.set(messageProto, 33*2 + 1);
         crypto.verifyMAC(Buffer.from(macInput), keys[1], mac, 8);

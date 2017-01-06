@@ -19,7 +19,6 @@ class SessionBuilder {
     constructor(storage, remoteAddress) {
         this.remoteAddress = remoteAddress;
         this.storage = storage;
-        this.ourIdentityKey = this.storage.getLocalIdentityKeyPair();
     }
 
     async processPreKey(device) {
@@ -120,7 +119,8 @@ class SessionBuilder {
         for (var i = 0; i < 32; i++) {
             sharedSecret[i] = 0xff;
         }
-        const a1 = crypto.calculateAgreement(theirSignedPubKey, this.ourIdentityKey.privKey);
+        const ourIdentityKey = await this.storage.getLocalIdentityKeyPair();
+        const a1 = crypto.calculateAgreement(theirSignedPubKey, ourIdentityKey.privKey);
         const a2 = crypto.calculateAgreement(theirIdentityPubKey, ourSignedKey.privKey);
         const a3 = crypto.calculateAgreement(theirSignedPubKey, ourSignedKey.privKey);
         if (isInitiator) {
