@@ -24,8 +24,8 @@ class SessionCipher {
         this.storage = storage;
     }
 
-    getRecord(encodedNumber) {
-        return this.storage.loadSession(encodedNumber);
+    async getRecord(encodedNumber) {
+        return await this.storage.loadSession(encodedNumber);
     }
 
     encrypt(buffer, encoding) {
@@ -41,7 +41,7 @@ class SessionCipher {
 
         return Promise.all([
             this.storage.getLocalRegistrationId(),
-            this.getRecord(address) // XXX is not async anymore
+            this.getRecord(address)
         ]).then(function(results) {
             myRegistrationId = results[0];
             record           = results[1];
@@ -84,8 +84,9 @@ class SessionCipher {
                 result.set(encodedMsg, 1);
                 result.set(mac.slice(0, 8), encodedMsg.byteLength + 1);
                 record.updateSessionState(session);
-                this.storage.storeSession(address, record);
-                return result;
+                return this.storage.storeSession(address, record).then(function() {
+                    return result;
+                });
             }.bind(this));
         }.bind(this)).then(function(message) {
             if (session.pendingPreKey !== undefined) {
@@ -140,15 +141,15 @@ class SessionCipher {
         }
         assert_buffer(buffer);
         const address = this.remoteAddress.toString();
-        const record = this.getRecord(address);
+        const record = await this.getRecord(address);
         if (!record) {
             throw new Error("No record for device " + address);
         }
         const errors = [];
         const result = await this.decryptWithSessionList(buffer, record.getSessions(), errors);
-        const record2 = this.getRecord(address); // XXX Why!?
+        const record2 = await this.getRecord(address); // XXX Why!?
         record2.updateSessionState(result.session);
-        this.storage.storeSession(address, record2);
+        await this.storage.storeSession(address, record2);
         return result.plaintext;
     }
 
@@ -163,7 +164,7 @@ class SessionCipher {
             throw new Error("Incompatible version number on PreKeyWhisperMessage");
         }
         const address = this.remoteAddress.toString();
-        let record = this.getRecord(address);
+        let record = await this.getRecord(address);
         const preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
         if (!record) {
             if (preKeyProto.registrationId === undefined) {
@@ -179,7 +180,7 @@ class SessionCipher {
         const plaintext = await this.doDecryptWhisperMessage(preKeyProto.message,
                                                              session);
         record.updateSessionState(session);
-        this.storage.storeSession(address, record);
+        await this.storage.storeSession(address, record);
         if (preKeyId !== undefined) {
             await this.storage.removePreKey(preKeyId);
         }
@@ -299,30 +300,22 @@ class SessionCipher {
         ratchet.rootKey = masterKey[0];
     }
 
-    getRemoteRegistrationId() {
-        const record = this.getRecord(this.remoteAddress.toString());
-        if (record === undefined) {
-            return undefined;
-        }
-        return record.registrationId;
-    }
-
-    hasOpenSession() {
-        const record = this.getRecord(this.remoteAddress.toString());
+    async hasOpenSession() {
+        const record = await this.getRecord(this.remoteAddress.toString());
         if (record === undefined) {
             return false;
         }
         return record.haveOpenSession();
     }
 
-    closeOpenSessionForDevice() {
+    async closeOpenSessionForDevice() {
         var address = this.remoteAddress.toString();
-        const record = this.getRecord(address);
+        const record = await this.getRecord(address);
         if (record === undefined || record.getOpenSession() === undefined) {
             return;
         }
         record.archiveCurrentState();
-        this.storage.storeSession(address, record);
+        await this.storage.storeSession(address, record);
     }
 }
 

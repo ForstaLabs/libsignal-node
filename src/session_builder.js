@@ -39,7 +39,7 @@ class SessionBuilder {
             baseKey: baseKey.pubKey
         };
         const address = this.remoteAddress.toString();
-        let record = this.storage.loadSession(address);
+        let record = await this.storage.loadSession(address);
         if (record === undefined) {
             console.warn("Created new SessionRecord:", address);
             record = new SessionRecord(device.identityKey, device.registrationId);
@@ -48,7 +48,7 @@ class SessionBuilder {
         }
         record.archiveCurrentState();
         record.updateSessionState(session, device.registrationId);
-        this.storage.storeSession(address, record);
+        await this.storage.storeSession(address, record);
         await this.storage.saveIdentity(this.remoteAddress.getName(),
                                         record.identityKey);
     }

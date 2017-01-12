@@ -50,6 +50,103 @@ class SessionEntry {
             yield [Buffer.from(k, 'base64'), v];
         }
     }
+
+    serialize() {
+        return {
+            registrationId: this.registrationId,
+            currentRatchet: {
+                ephemeralKeyPair: {
+                    pubKey: this.currentRatchet.ephemeralKeyPair.pubKey.toString('base64'),
+                    privKey: this.currentRatchet.ephemeralKeyPair.privKey.toString('base64')
+                },
+                lastRemoteEphemeralKey: this.currentRatchet.lastRemoteEphemeralKey.toString('base64'),
+                previousCounter: this.currentRatchet.previousCounter,
+                rootKey: this.currentRatchet.rootKey.toString('base64')
+            }, 
+            indexInfo: {
+                baseKey: this.indexInfo.baseKey.toString('base64'),
+                baseKeyType: this.indexInfo.baseKeyType,
+                closed: this.indexInfo.closed,
+                remoteIdentityKey: this.indexInfo.remoteIdentityKey.toString('base64')
+            },
+            oldRatchetList: this.oldRatchetList.map(function(x) {
+                return {
+                    added: x.added,
+                    ephemeralKey: x.ephemeralKey.toString('base64')
+                };
+            }),
+            _chains: this._serialize_chains(this._chains)
+        };
+    }
+
+    static deserialize(data) {
+        const obj = new this();
+        obj.registrationId = data.registrationId;
+        obj.currentRatchet = {
+            ephemeralKeyPair: {
+                pubKey: Buffer.from(data.currentRatchet.ephemeralKeyPair.pubKey, 'base64'),
+                privKey: Buffer.from(data.currentRatchet.ephemeralKeyPair.privKey, 'base64')
+            },
+            lastRemoteEphemeralKey: Buffer.from(data.currentRatchet.lastRemoteEphemeralKey, 'base64'),
+            previousCounter: data.currentRatchet.previousCounter,
+            rootKey: Buffer.from(data.currentRatchet.rootKey, 'base64')
+        };
+        obj.indexInfo = {
+            baseKey: Buffer.from(data.indexInfo.baseKey, 'base64'),
+            baseKeyType: data.indexInfo.baseKeyType,
+            closed: data.indexInfo.closed,
+            remoteIdentityKey: Buffer.from(data.indexInfo.remoteIdentityKey, 'base64')
+        };
+        obj.oldRatchetList = data.oldRatchetList.map(function(x) {
+            return {
+                added: x.added,
+                ephemeralKey: Buffer.from(x.ephemeralKey, 'base64')
+            };
+        });
+        obj._chains = this._deserialize_chains(data._chains);
+        return obj;
+    }
+
+    _serialize_chains(chains) {
+        const r = {};
+        for (const key of Object.keys(chains)) {
+            const c = chains[key];
+            const messageKeys = {};
+            for (const [idx, key] of Object.entries(c.messageKeys)) {
+                messageKeys[idx] = key.toString('base64');
+            }
+            r[key] = {
+                chainKey: {
+                    counter: c.chainKey.counter,
+                    key: c.chainKey.key.toString('base64')
+                },
+                chainType: c.chainType,
+                messageKeys: messageKeys
+            };
+        }
+        return r;
+    }
+
+    static _deserialize_chains(chains_data) {
+        const r = {};
+        for (const key of Object.keys(chains_data)) {
+            const c = chains_data[key];
+            const messageKeys = {};
+            for (const [idx, key] of Object.entries(c.messageKeys)) {
+                messageKeys[idx] = Buffer.from(key, 'base64');
+            }
+            r[key] = {
+                chainKey: {
+                    counter: c.chainKey.counter,
+                    key: Buffer.from(c.chainKey.key, 'base64')
+                },
+                chainType: c.chainType,
+                messageKeys: messageKeys
+            };
+        }
+        return r;
+    }
+
 }
 
 
@@ -104,7 +201,7 @@ class SessionRecord {
     getOpenSession() {
         var sessions = this._sessions;
         if (sessions === undefined) {
-            return undefined;
+            return;
         }
         this.detectDuplicateOpenSessions();
         for (var key in sessions) {
@@ -112,7 +209,6 @@ class SessionRecord {
                 return sessions[key];
             }
         }
-        return;
     }
 
     detectDuplicateOpenSessions() {
@@ -252,6 +348,27 @@ class SessionRecord {
             console.log("Deleting session closed at", oldestSession.indexInfo.closed);
             delete sessions[oldestBaseKey];
         }
+    }
+
+    serialize() {
+        const sessions = {};
+        for (const [key, entry] of Object.entries(this._sessions)) {
+            sessions[key] = entry.serialize();
+        }
+        return {
+            identityKey: this.identityKey.toString('base64'),
+            registrationId: this.registrationId,
+            _sessions: sessions
+        };
+    }
+
+    static deserialize(data) {
+        const obj = new this(Buffer.from(data.identityKey, 'base64'),
+                             data.registrationId);
+        for (const [key, entry_data] of Object.entries(data._sessions)) {
+            obj._sessions[key] = SessionEntry.deserialize(entry_data);
+        }
+        return obj;
     }
 }
 
