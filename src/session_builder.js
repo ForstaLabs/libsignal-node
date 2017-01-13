@@ -5,15 +5,6 @@ const ChainType = require('./chain_type.js');
 const crypto = require('./crypto.js');
 
 
-function assert_buffer(value) {
-    if (!Buffer.isBuffer(value)) {
-        debugger;
-        throw new TypeError(`Buffer type expected, not ` +
-                            `(${value.constructor.name})`);
-    }
-}
-
-
 class SessionBuilder {
 
     constructor(storage, remoteAddress) {

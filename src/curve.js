@@ -100,9 +100,7 @@ function wrapCurve(curve) {
             return curve.Ed25519Verify(pubKey, msg, sig);
         },
         calculateSignature: function(privKey, message) {
-            const s = curve.Ed25519Sign(privKey, message);
-            debugger;
-            return s
+            return curve.Ed25519Sign(privKey, message);
         }
     };
 }

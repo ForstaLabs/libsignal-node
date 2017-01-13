@@ -81,20 +81,7 @@ function verifyMAC(data, key, mac, length) {
     if (mac.length != length || calculated_mac.length < length) {
         throw new Error("Bad MAC length");
     }
-    const altresult = mac.equals(calculated_mac.slice(0, mac.length));
-    var a = new Uint8Array(calculated_mac.slice(0, length));
-    var b = new Uint8Array(mac);
-    var result = 0;
-    /* TODO: Optimize this.  This is a pointless exercise in bit manipulation.
-     * Just throw the error if the intersection is not equal. */
-    for (var i=0; i < mac.byteLength; ++i) {
-        result = result | (a[i] ^ b[i]);
-    }
-    if ((result === 0) !== altresult) {
-        debugger;
-        throw new Error("WTF?");
-    }
-    if (result !== 0) {
+    if (!mac.equals(calculated_mac.slice(0, mac.length))) {
         console.log('Our MAC  ', a);
         console.log('Their MAC', b);
         throw new Error("Bad MAC");

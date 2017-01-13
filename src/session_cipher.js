@@ -209,8 +209,6 @@ class SessionCipher {
         }
         this.fillMessageKeys(chain, message.counter);
         const messageKey = chain.messageKeys[message.counter];
-        console.trace("XXX", message.counter);
-        debugger;
         if (messageKey === undefined) {
             console.log("No message key found for counter:", message);
             var e = new Error(`Message key not found: ${message.counter}`);
