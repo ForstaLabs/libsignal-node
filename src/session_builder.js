@@ -45,12 +45,15 @@ class SessionBuilder {
     }
 
     async processV3(record, message) {
-        const trusted = await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
-                                                             message.identityKey);
+        const identifier = this.remoteAddress.getName();
+        const trusted = await this.storage.isTrustedIdentity(identifier, message.identityKey);
         if (!trusted) {
-            var e = new Error('Unknown identity key');
-            e.identityKey = message.identityKey;
-            throw e;
+            console.error("WARNING: Auto-accepting new peer identity:", identifier, message.identityKey);
+            await this.storage.removeIdentityKey(identifier);
+            await this.storage.saveIdentity(identifier, message.identityKey);
+            // XXX make a record reset method.
+            record.identityKey = null;
+            record._sessions = {};
         }
         const preKeyPair = await this.storage.loadPreKey(message.preKeyId);
         const signedPreKeyPair = await this.storage.loadSignedPreKey(message.signedPreKeyId);
@@ -83,7 +86,7 @@ class SessionBuilder {
         // end of decryptWhisperMessage ... to ensure that the sender
         // actually holds the private keys for all reported pubkeys
         record.updateSessionState(new_session, message.registrationId);
-        await this.storage.saveIdentity(this.remoteAddress.getName(), message.identityKey);
+        await this.storage.saveIdentity(identifier, message.identityKey);
         return message.preKeyId;
     }
 
