@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "license": "GPL-3.0",
   "dependencies": {
-    "long": "3.2.0",
+    "@protobufjs/codegen": "1.0.2",
     "protobufjs": "6.2.0"
   }
 }
