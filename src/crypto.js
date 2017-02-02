@@ -82,8 +82,6 @@ function verifyMAC(data, key, mac, length) {
         throw new Error("Bad MAC length");
     }
     if (!mac.equals(calculated_mac.slice(0, mac.length))) {
-        console.log('Our MAC  ', a);
-        console.log('Their MAC', b);
         throw new Error("Bad MAC");
     }
 }
