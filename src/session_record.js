@@ -116,7 +116,7 @@ class SessionEntry {
             r[key] = {
                 chainKey: {
                     counter: c.chainKey.counter,
-                    key: c.chainKey.key.toString('base64')
+                    key: c.chainKey.key && c.chainKey.key.toString('base64')
                 },
                 chainType: c.chainType,
                 messageKeys: messageKeys
@@ -136,7 +136,7 @@ class SessionEntry {
             r[key] = {
                 chainKey: {
                     counter: c.chainKey.counter,
-                    key: Buffer.from(c.chainKey.key, 'base64')
+                    key: c.chainKey.key && Buffer.from(c.chainKey.key, 'base64')
                 },
                 chainType: c.chainType,
                 messageKeys: messageKeys
