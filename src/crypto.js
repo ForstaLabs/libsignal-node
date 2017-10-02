@@ -46,7 +46,7 @@ function sign(key, data) {
 
 function hash(data) {
     assert_buffer(data);
-    const sha512 = crypto.createHash('sha512');
+    const sha512 = node_crypto.createHash('sha512');
     sha512.update(data);
     return sha512.digest();
 }
@@ -86,11 +86,6 @@ function verifyMAC(data, key, mac, length) {
     }
 }
 
-function getRandomBytes(len) {
-    throw new Error("DEPRECATED");
-    return node_crypto.randomBytes(len);
-}
-
 function createKeyPair(privKey) {
     if (privKey === undefined) {
         privKey = node_crypto.randomBytes(32);
@@ -106,6 +101,10 @@ function calculateSignature(privKey, message) {
     return curve.calculateSignature(privKey, message);
 }
 
+function verifySignature(pubKey, message, sig) {
+    return curve.verifySignature(pubKey, message, sig);
+}
+
 function generateKeyPair(privKey, message) {
     return curve.generateKeyPair(privKey, message);
 }
@@ -114,14 +113,14 @@ module.exports = {
     HKDF,
     calculateAgreement,
     calculateSignature,
+    verifySignature,
     createKeyPair,
     decrypt,
     encrypt,
     generateKeyPair,
-    getRandomBytes,
     hash,
     sign,
-    verifyMAC,
+    verifyMAC
 };
 
 

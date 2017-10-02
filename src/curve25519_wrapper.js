@@ -35,9 +35,7 @@ exports.keyPair = function(privKey) {
     var basepoint_ptr = _allocate(basepoint);
 
     // The return value is just 0, the operation is done in place
-    var err = curve25519._curve25519_donna(publicKey_ptr,
-                                           privateKey_ptr,
-                                           basepoint_ptr);
+    curve25519._curve25519_donna(publicKey_ptr, privateKey_ptr, basepoint_ptr);
 
     var res = new Uint8Array(32);
     _readBytes(publicKey_ptr, 32, res);
@@ -61,9 +59,7 @@ exports.sharedSecret = function(pubKey, privKey) {
     var basepoint_ptr = _allocate(new Uint8Array(pubKey));
 
     // Return value is 0 here too of course
-    var err = curve25519._curve25519_donna(sharedKey_ptr,
-                                           privateKey_ptr,
-                                           basepoint_ptr);
+    curve25519._curve25519_donna(sharedKey_ptr, privateKey_ptr, basepoint_ptr);
 
     var res = new Uint8Array(32);
     _readBytes(sharedKey_ptr, 32, res);
@@ -85,10 +81,7 @@ exports.sign = function(privKey, message) {
     // Get a pointer to the message
     var message_ptr = _allocate(new Uint8Array(message));
 
-    var err = curve25519._curve25519_sign(signature_ptr,
-                                          privateKey_ptr,
-                                          message_ptr,
-                                          message.byteLength);
+    curve25519._curve25519_sign(signature_ptr, privateKey_ptr, message_ptr, message.byteLength);
 
     var res = new Uint8Array(64);
     _readBytes(signature_ptr, 64, res);

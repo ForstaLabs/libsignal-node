@@ -7,8 +7,6 @@
 const ARCHIVED_STATES_MAX_LENGTH = 40;
 const BaseKeyType = require('./base_key_type.js');
 
-const MESSAGE_LOST_THRESHOLD_MS = 1000*60*60*24*7;
-
 
 class SessionEntry {
 

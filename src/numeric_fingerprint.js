@@ -5,7 +5,7 @@ var VERSION = 0;
 
 
 async function iterateHash(data, key, count) {
-    combined = (new U8intArray(Buffer.concat([data, key]))).buffer;
+    const combined = (new Uint8Array(Buffer.concat([data, key]))).buffer;
     const result = crypto.hash(combined);
     if (--count === 0) {
         return result;

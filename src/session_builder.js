@@ -1,8 +1,10 @@
 
-const SessionRecord = require('./session_record.js');
-const BaseKeyType = require('./base_key_type.js');
-const ChainType = require('./chain_type.js');
-const crypto = require('./crypto.js');
+'use strict';
+
+const SessionRecord = require('./session_record');
+const BaseKeyType = require('./base_key_type');
+const ChainType = require('./chain_type');
+const crypto = require('./crypto');
 
 
 class SessionBuilder {
@@ -18,8 +20,8 @@ class SessionBuilder {
         if (!trusted) {
             throw new Error('Identity key changed');
         }
-        crypto.Ed25519Verify(device.identityKey, device.signedPreKey.publicKey,
-                             device.signedPreKey.signature);
+        crypto.verifySignature(device.identityKey, device.signedPreKey.publicKey,
+                               device.signedPreKey.signature);
         const baseKey = crypto.createKeyPair();
         const devicePreKey = (device.preKey.publicKey);
         const session = await this.initSession(true, baseKey, undefined, device.identityKey,
