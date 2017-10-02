@@ -97,7 +97,6 @@ function wrapCurve(curve) {
             return curve.ECDHE(pubKey, privKey);
         },
         verifySignature: function(pubKey, msg, sig) {
-            debugger;
             return curve.Ed25519Verify(pubKey, msg, sig);
         },
         calculateSignature: function(privKey, message) {

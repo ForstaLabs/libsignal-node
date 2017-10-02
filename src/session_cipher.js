@@ -60,7 +60,6 @@ class SessionCipher {
         const msgBuf = protobufs.WhisperMessage.encode(msg).finish();
         const macInput = new Buffer(msgBuf.byteLength + 33 * 2 + 1);
         const ourIdentityKey = await this.storage.getLocalIdentityKeyPair();
-        debugger;
         macInput.set(ourIdentityKey.pubKey);
         macInput.set(session.indexInfo.remoteIdentityKey, 33);
         macInput[33*2] = (3 << 4) | 3;
