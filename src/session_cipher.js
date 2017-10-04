@@ -115,10 +115,7 @@ class SessionCipher {
         }.bind(this));
     }
 
-    async decryptWhisperMessage(buffer, encoding) {
-        if (encoding !== undefined) {
-            throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
-        }
+    async decryptWhisperMessage(buffer) {
         assert_buffer(buffer);
         const address = this.remoteAddress.toString();
         const record = await this.getRecord(address);
@@ -133,10 +130,7 @@ class SessionCipher {
         return result.plaintext;
     }
 
-    async decryptPreKeyWhisperMessage(buffer, encoding) {
-        if (encoding !== undefined) {
-            throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
-        }
+    async decryptPreKeyWhisperMessage(buffer) {
         assert_buffer(buffer);
         const version = buffer[0];
         buffer = buffer.slice(1);
