@@ -50,18 +50,15 @@ class SessionBuilder {
         const identifier = this.remoteAddress.getName();
         const trusted = await this.storage.isTrustedIdentity(identifier, message.identityKey);
         if (!trusted) {
-            console.error("WARNING: Auto-accepting new peer identity:", identifier, message.identityKey);
-            await this.storage.removeIdentityKey(identifier);
-            await this.storage.saveIdentity(identifier, message.identityKey);
-            // XXX make a record reset method.
-            record.identityKey = null;
-            record._sessions = {};
+            const error = new Error('Unknown identity key');
+            error.identityKey = message.identityKey;
+            throw error;
         }
         const preKeyPair = await this.storage.loadPreKey(message.preKeyId);
         const signedPreKeyPair = await this.storage.loadSignedPreKey(message.signedPreKeyId);
         let session = record.getSessionByBaseKey(message.baseKey);
         if (session) {
-          console.log("Duplicate PreKeyMessage for session");
+          console.warn("Duplicate PreKeyMessage for session");
           return;
         }
         session = record.getOpenSession();
