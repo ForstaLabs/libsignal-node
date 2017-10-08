@@ -2,7 +2,8 @@
 
 const protobuf = require('protobufjs');
 
-const p = protobuf.loadSync('./protos/WhisperTextProtocol.proto').lookup('textsecure');
+const protodir = __dirname + '/../protos/';
+const p = protobuf.loadSync(protodir + 'WhisperTextProtocol.proto').lookup('textsecure');
 
 module.exports = {
     WhisperMessage: p.lookup('WhisperMessage'),
