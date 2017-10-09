@@ -109,7 +109,7 @@ class SessionBuilder {
         for (var i = 0; i < 32; i++) {
             sharedSecret[i] = 0xff;
         }
-        const ourIdentityKey = await this.storage.getLocalIdentityKeyPair();
+        const ourIdentityKey = await this.storage.getOurIdentity();
         const a1 = crypto.calculateAgreement(theirSignedPubKey, ourIdentityKey.privKey);
         const a2 = crypto.calculateAgreement(theirIdentityPubKey, ourSignedKey.privKey);
         const a3 = crypto.calculateAgreement(theirSignedPubKey, ourSignedKey.privKey);

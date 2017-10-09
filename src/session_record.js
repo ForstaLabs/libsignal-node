@@ -323,7 +323,7 @@ class SessionRecord {
         while (session.oldRatchetList.length > 5) {
             let index = 0;
             let oldest = session.oldRatchetList[0];
-            for (const i = 0; i < session.oldRatchetList.length; i++) {
+            for (let i = 0; i < session.oldRatchetList.length; i++) {
                 if (session.oldRatchetList[i].added < oldest.added) {
                     oldest = session.oldRatchetList[i];
                     index = i;
