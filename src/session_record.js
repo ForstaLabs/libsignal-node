@@ -50,7 +50,7 @@ class SessionEntry {
     }
 
     serialize() {
-        return {
+        const data = {
             registrationId: this.registrationId,
             currentRatchet: {
                 ephemeralKeyPair: {
@@ -75,6 +75,11 @@ class SessionEntry {
             }),
             _chains: this._serialize_chains(this._chains)
         };
+        if (this.pendingPreKey) {
+            data.pendingPreKey = Object.assign({}, this.pendingPreKey);
+            data.pendingPreKey.baseKey = this.pendingPreKey.baseKey.toString('base64');
+        }
+        return data;
     }
 
     static deserialize(data) {
@@ -102,6 +107,10 @@ class SessionEntry {
             };
         });
         obj._chains = this._deserialize_chains(data._chains);
+        if (data.pendingPreKey) {
+            obj.pendingPreKey = Object.assign({}, data.pendingPreKey);
+            obj.pendingPreKey.baseKey = Buffer.from(data.pendingPreKey.baseKey, 'base64');
+        }
         return obj;
     }
 
@@ -173,7 +182,7 @@ class SessionRecord {
     }
 
     getSessionByBaseKey(baseKey) {
-        var session = this._sessions[baseKey.toString('base64')];
+        const session = this._sessions[baseKey.toString('base64')];
         if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
             console.log("Tried to lookup a session using our basekey");
             return;
@@ -197,12 +206,12 @@ class SessionRecord {
     }
 
     getOpenSession() {
-        var sessions = this._sessions;
+        const sessions = this._sessions;
         if (sessions === undefined) {
             return;
         }
         this.detectDuplicateOpenSessions();
-        for (var key in sessions) {
+        for (const key in sessions) {
             if (sessions[key].indexInfo.closed == -1) {
                 return sessions[key];
             }
@@ -210,9 +219,9 @@ class SessionRecord {
     }
 
     detectDuplicateOpenSessions() {
-        var openSession;
-        var sessions = this._sessions;
-        for (var key in sessions) {
+        let openSession;
+        const sessions = this._sessions;
+        for (const key in sessions) {
             if (sessions[key].indexInfo.closed == -1) {
                 if (openSession !== undefined) {
                     throw new Error("Datastore inconsistensy: multiple open sessions");
@@ -223,63 +232,59 @@ class SessionRecord {
     }
 
     updateSessionState(session, registrationId) {
-        var sessions = this._sessions;
-
+        const sessions = this._sessions;
         this.removeOldChains(session);
-
         if (this.identityKey === null) {
             this.identityKey = session.indexInfo.remoteIdentityKey;
         }
         if (!this.identityKey.equals(session.indexInfo.remoteIdentityKey)) {
             console.log(this.identityKey);
             console.log(session.indexInfo.remoteIdentityKey);
-            var e = new Error("Identity key changed at session save time");
+            const e = new Error("Identity key changed at session save time");
             e.identityKey = session.indexInfo.remoteIdentityKey;
             throw e;
         }
-
         sessions[session.indexInfo.baseKey.toString('base64')] = session;
-
         this.removeOldSessions();
-
-        var openSessionRemaining = false;
-        for (var key in sessions) {
+        let openSessionRemaining = false;
+        for (const key in sessions) {
             if (sessions[key].indexInfo.closed == -1) {
                 openSessionRemaining = true;
+                break;
             }
         }
         if (!openSessionRemaining) { // Used as a flag to get new pre keys for the next session
             this.registrationId = null;
-        } else if (this.registrationId === null && registrationId !== undefined) {
-            this.registrationId = registrationId;
         } else if (this.registrationId === null) {
-            throw new Error("Had open sessions on a record that had no registrationId set");
+            if (registrationId !== undefined) {
+                this.registrationId = registrationId;
+            } else {
+                throw new Error("Had open sessions on a record that had no registrationId set");
+            }
         }
     }
 
     getSessions() {
-        // return an array of sessions ordered by time closed,
-        // followed by the open session
-        var list = [];
-        var openSession;
-        for (var k in this._sessions) {
+        /* Return an array of sessions ordered by time closed, followed by the
+         * open session. */
+        const sessions = [];
+        let openSession;
+        for (const k in this._sessions) {
             if (this._sessions[k].indexInfo.closed === -1) {
                 openSession = this._sessions[k];
             } else {
-                list.push(this._sessions[k]);
+                sessions.push(this._sessions[k]);
             }
         }
-        list = list.sort(function(s1, s2) {
-            return s1.indexInfo.closed - s2.indexInfo.closed;
-        });
+        sessions.sort((s1, s2) => s1.indexInfo.closed - s2.indexInfo.closed);
         if (openSession) {
-            list.push(openSession);
+            sessions.push(openSession);
         }
-        return list;
+        return sessions;
     }
 
     archiveCurrentState() {
-        var open_session = this.getOpenSession();
+        const open_session = this.getOpenSession();
         if (open_session !== undefined) {
             this.closeSession(open_session);
             this.updateSessionState(open_session);
@@ -316,9 +321,9 @@ class SessionRecord {
         // Receiving ratchets are added to the oldRatchetList, which we parse
         // here and remove all but the last five.
         while (session.oldRatchetList.length > 5) {
-            var index = 0;
-            var oldest = session.oldRatchetList[0];
-            for (var i = 0; i < session.oldRatchetList.length; i++) {
+            let index = 0;
+            let oldest = session.oldRatchetList[0];
+            for (const i = 0; i < session.oldRatchetList.length; i++) {
                 if (session.oldRatchetList[i].added < oldest.added) {
                     oldest = session.oldRatchetList[i];
                     index = i;
@@ -332,13 +337,14 @@ class SessionRecord {
 
     removeOldSessions() {
         // Retain only the last 20 sessions
-        var sessions = this._sessions;
-        var oldestBaseKey, oldestSession;
+        const sessions = this._sessions;
+        let oldestBaseKey, oldestSession;
         while (Object.keys(sessions).length > ARCHIVED_STATES_MAX_LENGTH) {
-            for (var key in sessions) {
-                var session = sessions[key];
-                if (session.indexInfo.closed > -1 && // session is closed
-                    (!oldestSession || session.indexInfo.closed < oldestSession.indexInfo.closed)) {
+            for (const key in sessions) {
+                const session = sessions[key];
+                if (session.indexInfo.closed > -1 &&
+                    (!oldestSession ||
+                     session.indexInfo.closed < oldestSession.indexInfo.closed)) {
                     oldestBaseKey = key;
                     oldestSession = session;
                 }

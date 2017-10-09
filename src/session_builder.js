@@ -23,9 +23,9 @@ class SessionBuilder {
         crypto.verifySignature(device.identityKey, device.signedPreKey.publicKey,
                                device.signedPreKey.signature);
         const baseKey = crypto.createKeyPair();
-        const devicePreKey = (device.preKey.publicKey);
         const session = await this.initSession(true, baseKey, undefined, device.identityKey,
-                                               devicePreKey, device.signedPreKey.publicKey);
+                                               device.preKey.publicKey,
+                                               device.signedPreKey.publicKey);
         session.pendingPreKey = {
             preKeyId: device.preKey.keyId,
             signedKeyId: device.signedPreKey.keyId,
@@ -34,10 +34,7 @@ class SessionBuilder {
         const address = this.remoteAddress.toString();
         let record = await this.storage.loadSession(address);
         if (record === undefined) {
-            console.warn("Created new SessionRecord:", address);
             record = new SessionRecord(device.identityKey, device.registrationId);
-        } else {
-            console.log("Loaded SessionRecord:", address);
         }
         record.archiveCurrentState();
         record.updateSessionState(session, device.registrationId);

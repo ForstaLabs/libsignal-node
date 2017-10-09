@@ -72,6 +72,7 @@ class SessionCipher {
         record.updateSessionState(session);
         await this.storage.storeSession(address, record);
         if (session.pendingPreKey !== undefined) {
+            debugger;
             const preKeyMsg = protobufs.PreKeyWhisperMessage.create({
                 identityKey: ourIdentityKey.pubKey,
                 registrationId: myRegistrationId,
