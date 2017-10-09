@@ -72,7 +72,6 @@ class SessionCipher {
         record.updateSessionState(session);
         await this.storage.storeSession(address, record);
         if (session.pendingPreKey !== undefined) {
-            debugger;
             const preKeyMsg = protobufs.PreKeyWhisperMessage.create({
                 identityKey: ourIdentityKey.pubKey,
                 registrationId: myRegistrationId,
@@ -84,13 +83,13 @@ class SessionCipher {
             const pkBundleMsg = String.fromCharCode((3 << 4) | 3) +
                 protobufs.PreKeyWhisperMessage.encode(preKeyMsg).finish().toString('binary');
             return {
-                type: 3,
+                type: 3, // prekey bundle
                 body: pkBundleMsg,
                 registrationId: record.registrationId
             };
         } else {
             return {
-                type: 1,
+                type: 1, // ciphertext
                 body: message,
                 registrationId: record.registrationId
             };
