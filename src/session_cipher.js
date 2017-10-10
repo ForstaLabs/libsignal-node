@@ -154,19 +154,18 @@ class SessionCipher {
         const address = this.remoteAddress.toString();
         let record = await this.getRecord(address);
         const preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
+        const preKey = protobufs.PreKeyWhisperMessage.toObject(preKeyProto);
         if (!record) {
-            if (preKeyProto.registrationId === undefined) {
+            if (!preKey.registrationId) {
                 throw new Error("No registrationId");
             }
             console.log(`Creating new session record for: ${address}`);
-            record = new SessionRecord(preKeyProto.identityKey,
-                                       preKeyProto.registrationId);
+            record = new SessionRecord(preKey.identityKey, preKey.registrationId);
         }
         const builder = new SessionBuilder(this.storage, this.remoteAddress);
-        const preKeyId = await builder.processV3(record, preKeyProto);
-        const session = record.getSessionByBaseKey(preKeyProto.baseKey);
-        const plaintext = await this.doDecryptWhisperMessage(preKeyProto.message,
-                                                             session);
+        const preKeyId = await builder.processV3(record, preKey);
+        const session = record.getSessionByBaseKey(preKey.baseKey);
+        const plaintext = await this.doDecryptWhisperMessage(preKey.message, session);
         record.updateSessionState(session);
         await this.storage.storeSession(address, record);
         if (preKeyId !== undefined) {
@@ -184,9 +183,10 @@ class SessionCipher {
         if (versions[1] > 3 || versions[0] < 3) {  // min version > 3 or max version < 3
             throw new Error("Incompatible version number on WhisperMessage");
         }
-        const messageProto = messageBytes.slice(1, messageBytes.byteLength - 8);
+        const messageBuffer = messageBytes.slice(1, messageBytes.byteLength - 8);
         const mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
-        const message = protobufs.WhisperMessage.decode(messageProto);
+        const messageProto = protobufs.WhisperMessage.decode(messageBuffer);
+        const message = protobufs.WhisperMessage.toObject(messageProto);
         if (session.indexInfo.closed != -1) {
            console.log('decrypting message for closed session');
         }
@@ -206,12 +206,12 @@ class SessionCipher {
         delete chain.messageKeys[message.counter];
         const keys = crypto.HKDF(messageKey, Buffer.alloc(32),
                                  Buffer.from("WhisperMessageKeys"));
-        const macInput = new Buffer(messageProto.byteLength + (33 * 2) + 1);
+        const macInput = new Buffer(messageBuffer.byteLength + (33 * 2) + 1);
         macInput.set(session.indexInfo.remoteIdentityKey);
         const ourIdentityKey = await this.storage.getOurIdentity();
         macInput.set(ourIdentityKey.pubKey, 33);
         macInput[33*2] = this._encodeTupleByte(VERSION, VERSION);
-        macInput.set(messageProto, 33*2 + 1);
+        macInput.set(messageBuffer, 33*2 + 1);
         crypto.verifyMAC(macInput, keys[1], mac, 8);
         const plaintext = crypto.decrypt(keys[0], message.ciphertext, keys[2].slice(0, 16));
         delete session.pendingPreKey;
