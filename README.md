@@ -1,7 +1,7 @@
 libsignal-node
 ========
 Signal Protocol implementation for Node.js based on
-[libsignal-protocol-java](https://github.com/WhisperSystems/libsignal-protocol-java).
+[libsignal-protocol-javascript](https://github.com/WhisperSystems/libsignal-protocol-javascript).
 
 
 Overview
@@ -51,14 +51,6 @@ State is kept in the following places:
   PreKeys.
 * Session State. Clients will need to maintain the state of the sessions they
   have established.
-
-
-Building
---------
-To compile curve25519 from C souce files in `/native`, install
-[emscripten](https://kripken.github.io/emscripten-site/docs/getting_started/downloads.html).
-
-    grunt compile
 
 
 License
