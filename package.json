@@ -1,6 +1,6 @@
 {
   "name": "libsignal",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "WhisperSystem's libsignal for Node.js",
   "repository": "ForstaLabs/libsignal-node",
   "engines": {
