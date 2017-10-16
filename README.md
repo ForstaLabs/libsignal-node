@@ -59,6 +59,7 @@ State is kept in the following places:
 License
 --------
 Copyright 2015-2016 Open Whisper Systems
+
 Copyright 2017 Forsta Inc
 
 Licensed under the GPLv3: http://www.gnu.org/licenses/gpl-3.0.html
