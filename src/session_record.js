@@ -159,7 +159,7 @@ class SessionEntry {
 const migrations = [{
     version: 'v1',
     migrate: function migrateV1(data) {
-        const sessions = data.sessions;
+        const sessions = data._sessions;
         if (data.registrationId) {
             for (const key in sessions) {
                 if (!sessions[key].registrationId) {
@@ -354,8 +354,10 @@ class SessionRecord {
             this.migrate(data);
         }
         const obj = new this();
-        for (const [key, entry_data] of Object.entries(data.sessions)) {
-            obj.sessions[key] = SessionEntry.deserialize(entry_data);
+        if (data._sessions) {
+            for (const [key, entry_data] of Object.entries(data._sessions)) {
+                obj.sessions[key] = SessionEntry.deserialize(entry_data);
+            }
         }
         return obj;
     }

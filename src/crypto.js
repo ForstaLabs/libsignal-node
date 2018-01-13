@@ -77,11 +77,13 @@ function HKDF(input, salt, info) {
 }
 
 function verifyMAC(data, key, mac, length) {
-    const calculated_mac = sign(key, data);
-    if (mac.length != length || calculated_mac.length < length) {
+    const calculated_mac = sign(key, data).slice(0, length);
+    if (mac.length !== length || calculated_mac.length !== length) {
         throw new Error("Bad MAC length");
     }
-    if (!mac.equals(calculated_mac.slice(0, mac.length))) {
+    if (!mac.equals(calculated_mac)) {
+        console.error(`Bad MAC: expected ${calculated_mac.toString('hex')} ` +
+                      `got ${mac.toString('hex')}`);
         throw new Error("Bad MAC");
     }
 }
