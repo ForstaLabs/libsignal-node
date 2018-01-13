@@ -1,9 +1,10 @@
 
 'use strict';
 
-const SessionRecord = require('./session_record');
 const BaseKeyType = require('./base_key_type');
 const ChainType = require('./chain_type');
+const SessionLock = require('./session_lock');
+const SessionRecord = require('./session_record');
 const crypto = require('./crypto');
 
 
@@ -15,38 +16,42 @@ class SessionBuilder {
     }
 
     async processPreKey(device) {
-        const trusted = await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
-                                                             device.identityKey);
-        if (!trusted) {
-            throw new Error('Identity key changed');
-        }
-        crypto.verifySignature(device.identityKey, device.signedPreKey.publicKey,
-                               device.signedPreKey.signature);
-        const baseKey = crypto.createKeyPair();
-        const session = await this.initSession(true, baseKey, undefined, device.identityKey,
-                                               device.preKey.publicKey,
-                                               device.signedPreKey.publicKey);
-        session.pendingPreKey = {
-            preKeyId: device.preKey.keyId,
-            signedKeyId: device.signedPreKey.keyId,
-            baseKey: baseKey.pubKey
-        };
-        const address = this.remoteAddress.toString();
-        let record = await this.storage.loadSession(address);
-        if (record === undefined) {
-            record = new SessionRecord(device.identityKey, device.registrationId);
-        }
-        record.archiveCurrentState();
-        record.updateSessionState(session, device.registrationId);
-        await this.storage.storeSession(address, record);
-        await this.storage.saveIdentity(this.remoteAddress.getName(),
-                                        record.identityKey);
+        return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
+            const trusted = await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
+                                                                 device.identityKey);
+            if (!trusted) {
+                throw new Error('Identity key changed');
+            }
+            crypto.verifySignature(device.identityKey, device.signedPreKey.publicKey,
+                                   device.signedPreKey.signature);
+            const baseKey = crypto.createKeyPair();
+            const devicePreKey = device.preKey ? device.preKey.publicKey : undefined;
+            const session = await this.initSession(true, baseKey, undefined, device.identityKey,
+                                                   devicePreKey, device.signedPreKey.publicKey,
+                                                   device.registrationId);
+            session.pendingPreKey = {
+                signedKeyId: device.signedPreKey.keyId,
+                baseKey: baseKey.pubKey
+            };
+            if (device.preKey) {
+                session.pendingPreKey.preKeyId = device.preKey.keyId;
+            }
+            const address = this.remoteAddress.toString();
+            let record = await this.storage.loadSession(address);
+            if (record === undefined) {
+                record = new SessionRecord();
+            }
+            record.archiveCurrentState();
+            record.updateSessionState(session);
+            await this.storage.storeSession(address, record);
+            await this.storage.saveIdentity(this.remoteAddress.toString(),
+                                            session.indexInfo.remoteIdentityKey);
+        });
     }
 
     async processV3(record, message) {
-        const identifier = this.remoteAddress.getName();
-        const trusted = await this.storage.isTrustedIdentity(identifier, message.identityKey);
-        if (!trusted) {
+        if (!await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
+                                                  message.identityKey)) {
             const error = new Error('Unknown identity key');
             error.identityKey = message.identityKey;
             throw error;
@@ -81,8 +86,8 @@ class SessionBuilder {
         // Note that the session is not actually saved until the very
         // end of decryptWhisperMessage ... to ensure that the sender
         // actually holds the private keys for all reported pubkeys
-        record.updateSessionState(new_session, message.registrationId);
-        await this.storage.saveIdentity(identifier, message.identityKey);
+        record.updateSessionState(new_session);
+        await this.storage.saveIdentity(this.remoteAddress.toString(), message.identityKey);
         return message.preKeyId;
     }
 

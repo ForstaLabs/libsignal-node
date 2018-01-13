@@ -4,6 +4,7 @@
 
 const ChainType = require('./chain_type.js');
 const SessionBuilder = require('./session_builder.js');
+const SessionLock = require('./session_lock.js');
 const SessionRecord = require('./session_record.js');
 const crypto = require('./crypto.js');
 const protobufs = require('./protobufs.js');
@@ -40,74 +41,83 @@ class SessionCipher {
         return [byte >> 4, byte & 0xf];
     }
 
-    async encrypt(buffer, encoding) {
+    async encrypt(buffer) {
         assert_buffer(buffer);
-        if (encoding !== undefined) {
-          throw new Error("DEPRECATED: encoding not valid anymore, only pass Buffer type!");
-        }
-        const address = this.remoteAddress.toString();
-        const msg = protobufs.WhisperMessage.create();
-        const myRegistrationId = await this.storage.getOurRegistrationId();
-        const record = await this.getRecord(address);
-        if (!record) {
-            throw new Error("No record for " + address);
-        }
-        const session = record.getOpenSession();
-        if (!session) {
-            throw new Error("No session to encrypt message for " + address);
-        }
-        msg.ephemeralKey = session.currentRatchet.ephemeralKeyPair.pubKey;
-        const chain = session.getChain(msg.ephemeralKey);
-        if (chain.chainType === ChainType.RECEIVING) {
-            throw new Error("Tried to encrypt on a receiving chain");
-        }
-        this.fillMessageKeys(chain, chain.chainKey.counter + 1);
-        const keys = crypto.HKDF(chain.messageKeys[chain.chainKey.counter],
-                                 Buffer.alloc(32), Buffer.from("WhisperMessageKeys"));
-        delete chain.messageKeys[chain.chainKey.counter];
-        msg.counter = chain.chainKey.counter;
-        msg.previousCounter = session.currentRatchet.previousCounter;
-        const ciphertext = crypto.encrypt(keys[0], buffer, keys[2].slice(0, 16));
-        msg.ciphertext = ciphertext;
-        const msgBuf = protobufs.WhisperMessage.encode(msg).finish();
-        const macInput = new Buffer(msgBuf.byteLength + 33 * 2 + 1);
-        const ourIdentityKey = await this.storage.getOurIdentity();
-        macInput.set(ourIdentityKey.pubKey);
-        macInput.set(session.indexInfo.remoteIdentityKey, 33);
-        macInput[33*2] = this._encodeTupleByte(VERSION, VERSION);
-        macInput.set(msgBuf, 33 * 2 + 1);
-        const mac = crypto.sign(keys[1], macInput);
-        const message = new Buffer(msgBuf.byteLength + 9);
-        message[0] = this._encodeTupleByte(VERSION, VERSION);
-        message.set(msgBuf, 1);
-        message.set(mac.slice(0, 8), msgBuf.byteLength + 1);
-        record.updateSessionState(session);
-        await this.storage.storeSession(address, record);
-        if (session.pendingPreKey !== undefined) {
-            const preKeyMsg = protobufs.PreKeyWhisperMessage.create({
-                identityKey: ourIdentityKey.pubKey,
-                registrationId: myRegistrationId,
-                baseKey: session.pendingPreKey.baseKey,
-                preKeyId: session.pendingPreKey.preKeyId,
-                signedPreKeyId: session.pendingPreKey.signedKeyId,
-                message
-            });
-            const pkBundleMsg = Buffer.concat([
-                Buffer.from([this._encodeTupleByte(VERSION, VERSION)]),
-                protobufs.PreKeyWhisperMessage.encode(preKeyMsg).finish()
-            ]);
-            return {
-                type: 3, // prekey bundle
-                body: pkBundleMsg,
-                registrationId: record.registrationId
-            };
-        } else {
-            return {
-                type: 1, // ciphertext
-                body: message,
-                registrationId: record.registrationId
-            };
-        }
+        return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
+            const address = this.remoteAddress.toString();
+            const msg = protobufs.WhisperMessage.create();
+            const myRegistrationId = await this.storage.getOurRegistrationId();
+            const record = await this.getRecord(address);
+            if (!record) {
+                throw new Error("No record for " + address);
+            }
+            const session = record.getOpenSession();
+            if (!session) {
+                throw new Error("No session to encrypt message for " + address);
+            }
+            msg.ephemeralKey = session.currentRatchet.ephemeralKeyPair.pubKey;
+            const chain = session.getChain(msg.ephemeralKey);
+            if (chain.chainType === ChainType.RECEIVING) {
+                throw new Error("Tried to encrypt on a receiving chain");
+            }
+            this.fillMessageKeys(chain, chain.chainKey.counter + 1);
+            const keys = crypto.HKDF(chain.messageKeys[chain.chainKey.counter],
+                                     Buffer.alloc(32), Buffer.from("WhisperMessageKeys"));
+            delete chain.messageKeys[chain.chainKey.counter];
+            msg.counter = chain.chainKey.counter;
+            msg.previousCounter = session.currentRatchet.previousCounter;
+            const ciphertext = crypto.encrypt(keys[0], buffer, keys[2].slice(0, 16));
+            msg.ciphertext = ciphertext;
+            const msgBuf = protobufs.WhisperMessage.encode(msg).finish();
+            const macInput = new Buffer(msgBuf.byteLength + 33 * 2 + 1);
+            const ourIdentityKey = await this.storage.getOurIdentity();
+            macInput.set(ourIdentityKey.pubKey);
+            macInput.set(session.indexInfo.remoteIdentityKey, 33);
+            macInput[33*2] = this._encodeTupleByte(VERSION, VERSION);
+            macInput.set(msgBuf, 33 * 2 + 1);
+            const mac = crypto.sign(keys[1], macInput);
+            const message = new Buffer(msgBuf.byteLength + 9);
+            message[0] = this._encodeTupleByte(VERSION, VERSION);
+            message.set(msgBuf, 1);
+            message.set(mac.slice(0, 8), msgBuf.byteLength + 1);
+            if (!await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
+                                                      session.indexInfo.remoteIdentityKey)) {
+                throw new Error('Identity key changed');
+            }
+            if (await this.storage.saveIdentity(this.remoteAddress.toString(),
+                                                session.indexInfo.remoteIdentityKey)) {
+                record.removePreviousSessions();
+            }
+            record.updateSessionState(session);
+            await this.storage.storeSession(address, record);
+            if (session.pendingPreKey !== undefined) {
+                const preKeyMsg = protobufs.PreKeyWhisperMessage.create({
+                    identityKey: ourIdentityKey.pubKey,
+                    registrationId: myRegistrationId,
+                    baseKey: session.pendingPreKey.baseKey,
+                    signedPreKeyId: session.pendingPreKey.signedKeyId,
+                    message
+                });
+                if (session.pendingPreKey.preKeyId) {
+                    preKeyMsg.preKeyId = session.pendingPreKey.preKeyId;
+                }
+                const pkBundleMsg = Buffer.concat([
+                    Buffer.from([this._encodeTupleByte(VERSION, VERSION)]),
+                    protobufs.PreKeyWhisperMessage.encode(preKeyMsg).finish()
+                ]);
+                return {
+                    type: 3, // prekey bundle
+                    body: pkBundleMsg,
+                    registrationId: session.registrationId
+                };
+            } else {
+                return {
+                    type: 1, // ciphertext
+                    body: message,
+                    registrationId: session.registrationId
+                };
+            }
+        });
     }
 
     async decryptWithSessionList(buffer, sessionList, errors) {
@@ -124,6 +134,9 @@ class SessionCipher {
                 plaintext: await this.doDecryptWhisperMessage(buffer, session)
             };
         } catch(e) {
+            if (e.name === 'MessageCounterError') {
+                throw e;
+            }
             errors.push(e);
             return await this.decryptWithSessionList(buffer, sessionList, errors);
         }
@@ -131,17 +144,31 @@ class SessionCipher {
 
     async decryptWhisperMessage(buffer) {
         assert_buffer(buffer);
-        const address = this.remoteAddress.toString();
-        const record = await this.getRecord(address);
-        if (!record) {
-            throw new Error("No record for device " + address);
-        }
-        const errors = [];
-        const result = await this.decryptWithSessionList(buffer, record.getSessions(), errors);
-        const record2 = await this.getRecord(address); // XXX Why!?
-        record2.updateSessionState(result.session);
-        await this.storage.storeSession(address, record2);
-        return result.plaintext;
+        return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
+            const address = this.remoteAddress.toString();
+            let record = await this.getRecord(address);
+            if (!record) {
+                throw new Error("No record for device " + address);
+            }
+            const errors = [];
+            const result = await this.decryptWithSessionList(buffer, record.getSessions(), errors);
+            record = await this.getRecord(address);
+            if (result.session.indexInfo.baseKey !== record.getOpenSession().indexInfo.baseKey) {
+                record.archiveCurrentState();
+                record.promoteState(result.session);
+            }
+            if (!await this.storage.isTrustedIdentity(this.remoteAddress.getName(),
+                                                      result.session.indexInfo.remoteIdentityKey)) {
+                throw new Error('Identity key changed');
+            }
+            if (await this.storage.saveIdentity(this.remoteAddress.toString(),
+                                                result.session.indexInfo.remoteIdentityKey)) {
+                record.removePreviousSessions();
+            }
+            record.updateSessionState(result.session);
+            await this.storage.storeSession(address, record);
+            return result.plaintext;
+        });
     }
 
     async decryptPreKeyWhisperMessage(buffer) {
@@ -152,26 +179,27 @@ class SessionCipher {
             throw new Error("Incompatible version number on PreKeyWhisperMessage");
         }
         const address = this.remoteAddress.toString();
-        let record = await this.getRecord(address);
-        const preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
-        const preKey = protobufs.PreKeyWhisperMessage.toObject(preKeyProto);
-        if (!record) {
-            if (!preKey.registrationId) {
-                throw new Error("No registrationId");
+        return await SessionLock.queueJob(address, async () => {
+            let record = await this.getRecord(address);
+            const preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
+            const preKey = protobufs.PreKeyWhisperMessage.toObject(preKeyProto);
+            if (!record) {
+                if (!preKey.registrationId) {
+                    throw new Error("No registrationId");
+                }
+                record = new SessionRecord(preKey.registrationId);
             }
-            console.log(`Creating new session record for: ${address}`);
-            record = new SessionRecord(preKey.identityKey, preKey.registrationId);
-        }
-        const builder = new SessionBuilder(this.storage, this.remoteAddress);
-        const preKeyId = await builder.processV3(record, preKey);
-        const session = record.getSessionByBaseKey(preKey.baseKey);
-        const plaintext = await this.doDecryptWhisperMessage(preKey.message, session);
-        record.updateSessionState(session);
-        await this.storage.storeSession(address, record);
-        if (preKeyId !== undefined) {
-            await this.storage.removePreKey(preKeyId);
-        }
-        return plaintext;
+            const builder = new SessionBuilder(this.storage, this.remoteAddress);
+            const preKeyId = await builder.processV3(record, preKey);
+            const session = record.getSessionByBaseKey(preKey.baseKey);
+            const plaintext = await this.doDecryptWhisperMessage(preKey.message, session);
+            record.updateSessionState(session);
+            await this.storage.storeSession(address, record);
+            if (preKeyId !== undefined && preKeyId !== null) {
+                await this.storage.removePreKey(preKeyId);
+            }
+            return plaintext;
+        });
     }
 
     async doDecryptWhisperMessage(messageBytes, session) {
@@ -284,22 +312,53 @@ class SessionCipher {
         ratchet.rootKey = masterKey[0];
     }
 
+    async getRemoteRegistrationId() {
+        return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
+            const record = await this.getRecord(this.remoteAddress.toString());
+            if (record === undefined) {
+                return undefined;
+            }
+            var openSession = record.getOpenSession();
+            if (openSession === undefined) {
+                return null;
+            }
+            return openSession.registrationId;
+        });
+    }
+
     async hasOpenSession() {
-        const record = await this.getRecord(this.remoteAddress.toString());
-        if (record === undefined) {
-            return false;
-        }
-        return record.haveOpenSession();
+        return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
+            const record = await this.getRecord(this.remoteAddress.toString());
+            if (record === undefined) {
+                return false;
+            }
+            return record.haveOpenSession();
+        });
     }
 
     async closeOpenSessionForDevice() {
         const address = this.remoteAddress.toString();
-        const record = await this.getRecord(address);
-        if (record === undefined || record.getOpenSession() === undefined) {
-            return;
-        }
-        record.archiveCurrentState();
-        await this.storage.storeSession(address, record);
+        return await SessionLock.queueJob(address, async () => {
+            const record = await this.getRecord(address);
+            if (record === undefined || record.getOpenSession() === undefined) {
+                return;
+            }
+            record.archiveCurrentState();
+            await this.storage.storeSession(address, record);
+        });
+    }
+
+    async deleteAllSessionsForDevice() {
+        // Used in session reset scenarios, where we really need to delete
+        const address = this.remoteAddress.toString();
+        return await  SessionLock.queueJob(address, async () => {
+            const record = await this.getRecord(address);
+            if (record === undefined) {
+                return;
+            }
+            record.deleteAllSessions();
+            await this.storage.storeSession(address, record);
+        });
     }
 }
 

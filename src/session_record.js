@@ -1,11 +1,12 @@
-/*
- * vim: ts=4:sw=4
- */
+// vim: ts=4:sw=4
 
 'use strict';
 
-const ARCHIVED_STATES_MAX_LENGTH = 40;
 const BaseKeyType = require('./base_key_type.js');
+
+const ARCHIVED_STATES_MAX_LENGTH = 40;
+const OLD_RATCHETS_MAX_LENGTH = 10;
+const SESSION_RECORD_VERSION = 'v1';
 
 
 class SessionEntry {
@@ -24,7 +25,7 @@ class SessionEntry {
         }
         this._chains[id] = value;
     }
-    
+
     getChain(key) {
         if (!Buffer.isBuffer(key)) {
             throw new TypeError("Buffer Type Required");
@@ -51,7 +52,6 @@ class SessionEntry {
 
     serialize() {
         const data = {
-            registrationId: this.registrationId,
             currentRatchet: {
                 ephemeralKeyPair: {
                     pubKey: this.currentRatchet.ephemeralKeyPair.pubKey.toString('base64'),
@@ -60,7 +60,7 @@ class SessionEntry {
                 lastRemoteEphemeralKey: this.currentRatchet.lastRemoteEphemeralKey.toString('base64'),
                 previousCounter: this.currentRatchet.previousCounter,
                 rootKey: this.currentRatchet.rootKey.toString('base64')
-            }, 
+            },
             indexInfo: {
                 baseKey: this.indexInfo.baseKey.toString('base64'),
                 baseKeyType: this.indexInfo.baseKeyType,
@@ -84,7 +84,6 @@ class SessionEntry {
 
     static deserialize(data) {
         const obj = new this();
-        obj.registrationId = data.registrationId;
         obj.currentRatchet = {
             ephemeralKeyPair: {
                 pubKey: Buffer.from(data.currentRatchet.ephemeralKeyPair.pubKey, 'base64'),
@@ -157,32 +156,64 @@ class SessionEntry {
 }
 
 
+const migrations = [{
+    version: 'v1',
+    migrate: function migrateV1(data) {
+        const sessions = data.sessions;
+        if (data.registrationId) {
+            for (const key in sessions) {
+                if (!sessions[key].registrationId) {
+                    sessions[key].registrationId = data.registrationId;
+                }
+            }
+        } else {
+            for (const key in sessions) {
+                if (sessions[key].indexInfo.closed === -1) {
+                    console.error('V1 session storage migration error: registrationId',
+                                  data.registrationId, 'for open session version',
+                                  data.version);
+                }
+            }
+        }
+    }
+}];
+
+
+
+
 class SessionRecord {
 
     static createEntry() {
         return new SessionEntry();
     }
 
-    constructor(identityKey, registrationId) {
-        this._sessions = {};
-        if (!(identityKey instanceof Buffer)) {
-            throw new TypeError('identityKey must be Buffer');
+    static migrate(data) {
+        let run = (data.version === undefined);
+        for (let i = 0; i < migrations.length; ++i) {
+            if (run) {
+                console.info("Migrating session to:", migrations[i].version);
+                migrations[i].migrate(data);
+            } else if (migrations[i].version === data.version) {
+                run = true;
+            }
         }
-        this.identityKey = identityKey;
-        this.registrationId = registrationId;
+        if (!run) {
+            throw new Error("Error migrating SessionRecord");
+        }
+    }
 
-        if (this.registrationId === undefined ||
-            typeof this.registrationId !== 'number') {
-            this.registrationId = null;
-        }
+    constructor() {
+        this.sessions = {};
+        this.version = SESSION_RECORD_VERSION;
     }
 
     haveOpenSession() {
-        return this.registrationId !== null;
+        const openSession = this.getOpenSession();
+        return (!!openSession && typeof openSession.registrationId === 'number');
     }
 
     getSessionByBaseKey(baseKey) {
-        const session = this._sessions[baseKey.toString('base64')];
+        const session = this.sessions[baseKey.toString('base64')];
         if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
             console.log("Tried to lookup a session using our basekey");
             return;
@@ -193,8 +224,8 @@ class SessionRecord {
     getSessionByRemoteEphemeralKey(remoteEphemeralKey) {
         this.detectDuplicateOpenSessions();
         let openSession;
-        for (const key in this._sessions) {
-            const s = this._sessions[key];
+        for (const key in this.sessions) {
+            const s = this.sessions[key];
             if (s.getChain(remoteEphemeralKey) !== undefined) {
                 return s;
             }
@@ -206,7 +237,7 @@ class SessionRecord {
     }
 
     getOpenSession() {
-        const sessions = this._sessions;
+        const sessions = this.sessions;
         if (sessions === undefined) {
             return;
         }
@@ -220,7 +251,7 @@ class SessionRecord {
 
     detectDuplicateOpenSessions() {
         let openSession;
-        const sessions = this._sessions;
+        const sessions = this.sessions;
         for (const key in sessions) {
             if (sessions[key].indexInfo.closed == -1) {
                 if (openSession !== undefined) {
@@ -231,37 +262,11 @@ class SessionRecord {
         }
     }
 
-    updateSessionState(session, registrationId) {
-        const sessions = this._sessions;
+    updateSessionState(session) {
+        const sessions = this.sessions;
         this.removeOldChains(session);
-        if (this.identityKey === null) {
-            this.identityKey = session.indexInfo.remoteIdentityKey;
-        }
-        if (!this.identityKey.equals(session.indexInfo.remoteIdentityKey)) {
-            console.log(this.identityKey);
-            console.log(session.indexInfo.remoteIdentityKey);
-            const e = new Error("Identity key changed at session save time");
-            e.identityKey = session.indexInfo.remoteIdentityKey;
-            throw e;
-        }
         sessions[session.indexInfo.baseKey.toString('base64')] = session;
         this.removeOldSessions();
-        let openSessionRemaining = false;
-        for (const key in sessions) {
-            if (sessions[key].indexInfo.closed == -1) {
-                openSessionRemaining = true;
-                break;
-            }
-        }
-        if (!openSessionRemaining) { // Used as a flag to get new pre keys for the next session
-            this.registrationId = null;
-        } else if (this.registrationId === null) {
-            if (registrationId !== undefined) {
-                this.registrationId = registrationId;
-            } else {
-                throw new Error("Had open sessions on a record that had no registrationId set");
-            }
-        }
     }
 
     getSessions() {
@@ -269,11 +274,11 @@ class SessionRecord {
          * open session. */
         const sessions = [];
         let openSession;
-        for (const k in this._sessions) {
-            if (this._sessions[k].indexInfo.closed === -1) {
-                openSession = this._sessions[k];
+        for (const k in this.sessions) {
+            if (this.sessions[k].indexInfo.closed === -1) {
+                openSession = this.sessions[k];
             } else {
-                sessions.push(this._sessions[k]);
+                sessions.push(this.sessions[k]);
             }
         }
         sessions.sort((s1, s2) => s1.indexInfo.closed - s2.indexInfo.closed);
@@ -286,41 +291,20 @@ class SessionRecord {
     archiveCurrentState() {
         const open_session = this.getOpenSession();
         if (open_session !== undefined) {
-            this.closeSession(open_session);
+            open_session.indexInfo.closed = Date.now();
             this.updateSessionState(open_session);
         }
     }
 
-    closeSession(session) {
-        if (session.indexInfo.closed > -1) {
-            return;
-        }
-        console.log('closing session', session.indexInfo.baseKey);
-
-        // After this has run, we can still receive messages on ratchet chains which
-        // were already open (unless we know we dont need them),
-        // but we cannot send messages or step the ratchet
-
-        session.deleteChain(session.currentRatchet.ephemeralKeyPair.pubKey);
-        // Move all receive ratchets to the oldRatchetList to mark them for deletion
-        for (const [key, chain] of session.chains()) {
-            if (chain.chainKey !== undefined &&
-                chain.chainKey.key !== undefined) {
-                session.oldRatchetList[session.oldRatchetList.length] = {
-                    added: Date.now(),
-                    ephemeralKey: Buffer.from(key, 'base64')
-                };
-            }
-        }
-        session.indexInfo.closed = Date.now();
-        this.removeOldChains(session);
+    promoteState(session) {
+        session.indexInfo.closed = -1;
     }
 
     removeOldChains(session) {
         // Sending ratchets are always removed when we step because we never need them again
         // Receiving ratchets are added to the oldRatchetList, which we parse
-        // here and remove all but the last five.
-        while (session.oldRatchetList.length > 5) {
+        // here and remove all but the last ten.
+        while (session.oldRatchetList.length > OLD_RATCHETS_MAX_LENGTH) {
             let index = 0;
             let oldest = session.oldRatchetList[0];
             for (let i = 0; i < session.oldRatchetList.length; i++) {
@@ -337,7 +321,7 @@ class SessionRecord {
 
     removeOldSessions() {
         // Retain only the last 20 sessions
-        const sessions = this._sessions;
+        const sessions = this.sessions;
         let oldestBaseKey, oldestSession;
         while (Object.keys(sessions).length > ARCHIVED_STATES_MAX_LENGTH) {
             for (const key in sessions) {
@@ -356,21 +340,22 @@ class SessionRecord {
 
     serialize() {
         const sessions = {};
-        for (const [key, entry] of Object.entries(this._sessions)) {
+        for (const [key, entry] of Object.entries(this.sessions)) {
             sessions[key] = entry.serialize();
         }
         return {
-            identityKey: this.identityKey.toString('base64'),
-            registrationId: this.registrationId,
-            _sessions: sessions
+            sessions,
+            version: this.version
         };
     }
 
     static deserialize(data) {
-        const obj = new this(Buffer.from(data.identityKey, 'base64'),
-                             data.registrationId);
-        for (const [key, entry_data] of Object.entries(data._sessions)) {
-            obj._sessions[key] = SessionEntry.deserialize(entry_data);
+        if (data.version !== SESSION_RECORD_VERSION) {
+            this.migrate(data);
+        }
+        const obj = new this();
+        for (const [key, entry_data] of Object.entries(data.sessions)) {
+            obj.sessions[key] = SessionEntry.deserialize(entry_data);
         }
         return obj;
     }
