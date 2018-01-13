@@ -125,7 +125,15 @@ class SessionCipher {
         // using each one at a time. Stop and return the result if we get
         // a valid result
         if (sessionList.length === 0) {
-            throw errors[0]; // XXX suspect.
+            if (errors.length) {
+                if (errors.length > 1) {
+                    console.warn("Ignoring subsequent session decrypt errors:",
+                                 errors.slice(1));
+                }
+                throw errors[0];
+            } else {
+                throw new Error("Session list empty");
+            }
         }
         const session = sessionList.pop();
         try {
