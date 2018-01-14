@@ -52,6 +52,7 @@ class SessionEntry {
 
     serialize() {
         const data = {
+            registrationId: this.registrationId,
             currentRatchet: {
                 ephemeralKeyPair: {
                     pubKey: this.currentRatchet.ephemeralKeyPair.pubKey.toString('base64'),
@@ -84,6 +85,7 @@ class SessionEntry {
 
     static deserialize(data) {
         const obj = new this();
+        obj.registrationId = data.registrationId;
         obj.currentRatchet = {
             ephemeralKeyPair: {
                 pubKey: Buffer.from(data.currentRatchet.ephemeralKeyPair.pubKey, 'base64'),
@@ -339,12 +341,12 @@ class SessionRecord {
     }
 
     serialize() {
-        const sessions = {};
+        const _sessions = {};
         for (const [key, entry] of Object.entries(this.sessions)) {
-            sessions[key] = entry.serialize();
+            _sessions[key] = entry.serialize();
         }
         return {
-            sessions,
+            _sessions,
             version: this.version
         };
     }

@@ -188,15 +188,9 @@ class SessionCipher {
         }
         const address = this.remoteAddress.toString();
         return await SessionLock.queueJob(address, async () => {
-            let record = await this.getRecord(address);
+            let record = await this.getRecord(address) || new SessionRecord();
             const preKeyProto = protobufs.PreKeyWhisperMessage.decode(buffer);
             const preKey = protobufs.PreKeyWhisperMessage.toObject(preKeyProto);
-            if (!record) {
-                if (!preKey.registrationId) {
-                    throw new Error("No registrationId");
-                }
-                record = new SessionRecord(preKey.registrationId);
-            }
             const builder = new SessionBuilder(this.storage, this.remoteAddress);
             const preKeyId = await builder.processV3(record, preKey);
             const session = record.getSessionByBaseKey(preKey.baseKey);
