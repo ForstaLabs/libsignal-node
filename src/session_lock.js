@@ -6,12 +6,12 @@
 
 
 const _queueAsyncBuckets = new Map();
+const _gcLimit = 10000;
 
 async function _asyncQueueExecutor(queue, cleanup) {
     let offt = 0;
-    const gcLimit = 100;
     while (true) {
-        let limit = Math.min(queue.length, gcLimit); // Break up thundering hurds for GC duty.
+        let limit = Math.min(queue.length, _gcLimit); // Break up thundering hurds for GC duty.
         for (let i = offt; i < limit; i++) {
             const job = queue[i];
             try {
@@ -22,7 +22,7 @@ async function _asyncQueueExecutor(queue, cleanup) {
         }
         if (limit < queue.length) {
             /* Perform lazy GC of queue for faster iteration. */
-            if (limit >= gcLimit) {
+            if (limit >= _gcLimit) {
                 queue.splice(0, limit);
                 offt = 0;
             } else {
@@ -36,7 +36,7 @@ async function _asyncQueueExecutor(queue, cleanup) {
 }
 
 const SessionLock = {
-    jobQueue: function(bucket, awaitable) {
+    queueJob: function(bucket, awaitable) {
         /* Run the async awaitable only when all other async calls registered
          * here have completed (or thrown).  The bucket argument is a hashable
          * key representing the task queue to use. */
