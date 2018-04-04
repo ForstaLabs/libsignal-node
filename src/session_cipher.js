@@ -245,13 +245,14 @@ class SessionCipher {
     }
 
     fillMessageKeys(chain, counter) {
-        if (Object.keys(chain.messageKeys).length >= 1000) {
-            console.log("Too many message keys for chain");
-            return; // Stalker, much?
-        }
         if (chain.chainKey.counter >= counter) {
             return;
         }
+
+        if (counter - chain.chainKey.counter > 2000) {
+            throw new Error('Over 2000 messages into the future!');
+        }
+
         if (chain.chainKey.key === undefined) {
             throw new Error("Got invalid request to extend chain after it was already closed");
         }
@@ -266,7 +267,6 @@ class SessionCipher {
         if (session.getChain(remoteKey) !== undefined) {
             return;
         }
-        console.log('New remote ephemeral key');
         const ratchet = session.currentRatchet;
         let previousRatchet = session.getChain(ratchet.lastRemoteEphemeralKey);
         if (previousRatchet !== undefined) {
