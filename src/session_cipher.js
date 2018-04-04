@@ -84,10 +84,8 @@ class SessionCipher {
                                                       session.indexInfo.remoteIdentityKey)) {
                 throw new Error('Identity key changed');
             }
-            if (await this.storage.saveIdentity(this.remoteAddress.toString(),
-                                                session.indexInfo.remoteIdentityKey)) {
-                record.removePreviousSessions();
-            }
+            await this.storage.saveIdentity(this.remoteAddress.toString(),
+                                            session.indexInfo.remoteIdentityKey);
             record.updateSessionState(session);
             await this.storage.storeSession(address, record);
             if (session.pendingPreKey !== undefined) {
@@ -169,10 +167,8 @@ class SessionCipher {
                                                       result.session.indexInfo.remoteIdentityKey)) {
                 throw new Error('Identity key changed');
             }
-            if (await this.storage.saveIdentity(this.remoteAddress.toString(),
-                                                result.session.indexInfo.remoteIdentityKey)) {
-                record.removePreviousSessions();
-            }
+            await this.storage.saveIdentity(this.remoteAddress.toString(),
+                                            result.session.indexInfo.remoteIdentityKey);
             record.updateSessionState(result.session);
             await this.storage.storeSession(address, record);
             return result.plaintext;
