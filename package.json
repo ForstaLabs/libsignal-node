@@ -1,6 +1,6 @@
 {
   "name": "libsignal",
-  "version": "1.2.2",
+  "version": "2.0.0",
   "description": "Open Whisper Systems' libsignal for Node.js",
   "repository": "ForstaLabs/libsignal-node",
   "engines": {
@@ -16,6 +16,8 @@
     "protobufjs": "6.8.0"
   },
   "devDependencies": {
-    "eslint": "4.9.0"
+    "eslint": "4.9.0",
+    "grunt": "1.0.3",
+    "grunt-cli": "1.2.0"
   }
 }

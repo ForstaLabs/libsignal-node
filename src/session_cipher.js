@@ -1,17 +1,16 @@
-/*
- * vim: ts=4:sw=4
- */
+// vim: ts=4:sw=4:expandtab
 
-const ChainType = require('./chain_type.js');
-const SessionBuilder = require('./session_builder.js');
-const SessionLock = require('./session_lock.js');
-const SessionRecord = require('./session_record.js');
-const crypto = require('./crypto.js');
-const protobufs = require('./protobufs.js');
+const ChainType = require('./chain_type');
+const SessionBuilder = require('./session_builder');
+const SessionRecord = require('./session_record');
+const crypto = require('./crypto');
+const curve = require('./curve');
+const protobufs = require('./protobufs');
+const queueJob = require('./queue_job');
 
 const VERSION = 3;
 
-function assert_buffer(value) {
+function assertBuffer(value) {
     if (!(value instanceof Buffer)) {
         throw TypeError(`Expected Buffer instead of: ${value.constructor.name}`);
     }
@@ -42,7 +41,7 @@ class SessionCipher {
     }
 
     async encrypt(buffer) {
-        assert_buffer(buffer);
+        assertBuffer(buffer);
         return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
             const address = this.remoteAddress.toString();
             const msg = protobufs.WhisperMessage.create();
@@ -149,7 +148,7 @@ class SessionCipher {
     }
 
     async decryptWhisperMessage(buffer) {
-        assert_buffer(buffer);
+        assertBuffer(buffer);
         return await SessionLock.queueJob(this.remoteAddress.toString(), async () => {
             const address = this.remoteAddress.toString();
             let record = await this.getRecord(address);
@@ -176,7 +175,7 @@ class SessionCipher {
     }
 
     async decryptPreKeyWhisperMessage(buffer) {
-        assert_buffer(buffer);
+        assertBuffer(buffer);
         const versions = this._decodeTupleByte(buffer[0]);
         buffer = buffer.slice(1);
         if (versions[1] > 3 || versions[0] < 3) {  // min version > 3 or max version < 3
@@ -201,7 +200,7 @@ class SessionCipher {
     }
 
     async doDecryptWhisperMessage(messageBytes, session) {
-        assert_buffer(messageBytes);
+        assertBuffer(messageBytes);
         if (session === undefined) {
             throw new Error(`No session found for: ${this.remoteAddress.toString()}`);
         }
