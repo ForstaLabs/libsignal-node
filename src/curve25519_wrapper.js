@@ -1,8 +1,18 @@
 // vim: ts=4:sw=4:expandtab
 
+// Remove the dubious emscripten callback that invokes process.exit(1) on any
+// unhandledRejection event.
+let _exitCallback;
+const captureExitCallback = (ev, callback) => {
+    if (ev === 'unhandledRejection') {
+        _exitCallback = callback;  // Must remove outside emit context.
+        process.removeListener(ev, callback);
+    }
+};
+process.addListener('newListener', captureExitCallback);
 const curve25519 = require('../build/curve25519');
-
-'use strict';
+process.removeListener('newListener', captureExitCallback);
+process.removeListener('unhandledRejection', _exitCallback);
 
 // Insert some bytes into the emscripten memory and return a pointer
 function _allocate(bytes) {
