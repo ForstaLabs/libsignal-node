@@ -4,6 +4,7 @@
 const BaseKeyType = require('./base_key_type');
 const ChainType = require('./chain_type');
 const SessionRecord = require('./session_record');
+const crypto = require('./crypto');
 const curve = require('./curve');
 const errors = require('./errors');
 const queueJob = require('./queue_job');
@@ -117,8 +118,8 @@ class SessionBuilder {
             const a4 = curve.calculateAgreement(theirEphemeralPubKey, ourEphemeralKey.privKey);
             sharedSecret.set(new Uint8Array(a4), 32 * 4);
         }
-        const masterKey = curve.deriveSecrets(Buffer.from(sharedSecret), Buffer.alloc(32),
-                                              Buffer.from("WhisperText"));
+        const masterKey = crypto.deriveSecrets(Buffer.from(sharedSecret), Buffer.alloc(32),
+                                               Buffer.from("WhisperText"));
         const session = SessionRecord.createEntry();
         session.registrationId = registrationId;
         session.currentRatchet = {
@@ -147,7 +148,7 @@ class SessionBuilder {
     calculateSendingRatchet(session, remoteKey) {
         const ratchet = session.currentRatchet;
         const sharedSecret = curve.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey);
-        const masterKey = curve.deriveSecrets(sharedSecret, ratchet.rootKey, Buffer.from("WhisperRatchet"));
+        const masterKey = crypto.deriveSecrets(sharedSecret, ratchet.rootKey, Buffer.from("WhisperRatchet"));
         session.addChain(ratchet.ephemeralKeyPair.pubKey, {
             messageKeys: {},
             chainKey: {

@@ -7,3 +7,4 @@ exports.ProtocolAddress = require('./src/protocol_address');
 exports.SessionBuilder = require('./src/session_builder');
 exports.SessionCipher = require('./src/session_cipher');
 exports.SessionRecord = require('./src/session_record');
+Object.assign(exports, require('./src/errors'));

@@ -53,6 +53,11 @@ class SessionCipher {
         return record;
     }
 
+    async storeRecord(record) {
+        record.removeOldSessions();
+        await this.storage.storeSession(this.addr.toString(), record);
+    }
+
     async queueJob(awaitable) {
         return await queueJob(this.addr.toString(), awaitable);
     }
@@ -198,7 +203,6 @@ class SessionCipher {
             const preKeyId = await builder.initIncoming(record, preKeyProto);
             const session = record.getSession(preKeyProto.baseKey);
             const plaintext = await this.doDecryptWhisperMessage(preKeyProto.message, session);
-            record.updateSessionState(session);
             await this.storeRecord(record);
             if (preKeyId) {
                 await this.storage.removePreKey(preKeyId);
@@ -224,7 +228,7 @@ class SessionCipher {
             throw new Error("Tried to decrypt on a sending chain");
         }
         this.fillMessageKeys(chain, message.counter);
-        if (chain.messageKeys.hasOwnProperty(message.counter)) {
+        if (!chain.messageKeys.hasOwnProperty(message.counter)) {
             // Most likely the message was already decrypted and we are trying to process
             // twice.  This can happen if the user restarts before the server gets an ACK.
             throw new errors.MessageCounterError('Key used already or never filled');
