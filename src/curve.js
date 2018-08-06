@@ -79,5 +79,5 @@ exports.verifySignature = function(pubKey, msg, sig) {
 
 exports.generateKeyPair = function() {
     const privKey = nodeCrypto.randomBytes(32);
-    return curve25519.createKeyPair(privKey);
+    return exports.createKeyPair(privKey);
 };

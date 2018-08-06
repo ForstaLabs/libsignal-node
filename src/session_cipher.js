@@ -194,9 +194,7 @@ class SessionCipher {
                 }
                 record = new SessionRecord();
             }
-            const builder = new SessionBuilder(this.storage, this.remoteAddress);
-            const preKey = protobufs.PreKeyWhisperMessage.toObject(preKeyProto);
-            debugger;
+            const builder = new SessionBuilder(this.storage, this.addr);
             const preKeyId = await builder.initIncoming(record, preKeyProto);
             const session = record.getSession(preKeyProto.baseKey);
             const plaintext = await this.doDecryptWhisperMessage(preKeyProto.message, session);
@@ -209,22 +207,17 @@ class SessionCipher {
         });
     }
 
-    async doDecryptWhisperMessage(messageBytes, session) {
-        assertBuffer(messageBytes);
-        if (session === undefined) {
-            throw new Error(`No session found for: ${this.remoteAddress.toString()}`);
+    async doDecryptWhisperMessage(messageBuffer, session) {
+        assertBuffer(messageBuffer);
+        if (!session) {
+            throw new TypeError("session required");
         }
-        const versions = this._decodeTupleByte(messageBytes[0]);
+        const versions = this._decodeTupleByte(messageBuffer[0]);
         if (versions[1] > 3 || versions[0] < 3) {  // min version > 3 or max version < 3
             throw new Error("Incompatible version number on WhisperMessage");
         }
-        const messageBuffer = messageBytes.slice(1, messageBytes.byteLength - 8);
-        const mac = messageBytes.slice(messageBytes.byteLength - 8, messageBytes.byteLength);
-        const messageProto = protobufs.WhisperMessage.decode(messageBuffer);
-        const message = protobufs.WhisperMessage.toObject(messageProto);
-        if (session.indexInfo.closed != -1) {
-           console.log('decrypting message for closed session');
-        }
+        const messageProto = messageBuffer.slice(1, -8);
+        const message = protobufs.WhisperMessage.decode(messageProto);
         this.maybeStepRatchet(session, message.ephemeralKey, message.previousCounter);
         const chain = session.getChain(message.ephemeralKey);
         if (chain.chainType === ChainType.SENDING) {
@@ -240,15 +233,15 @@ class SessionCipher {
         delete chain.messageKeys[message.counter];
         const keys = crypto.deriveSecrets(messageKey, Buffer.alloc(32),
                                           Buffer.from("WhisperMessageKeys"));
-        const macInput = new Buffer(messageBuffer.byteLength + (33 * 2) + 1);
-        macInput.set(session.indexInfo.remoteIdentityKey);
         const ourIdentityKey = await this.storage.getOurIdentity();
+        const macInput = new Buffer(messageProto.byteLength + (33 * 2) + 1);
+        macInput.set(session.indexInfo.remoteIdentityKey);
         macInput.set(ourIdentityKey.pubKey, 33);
-        macInput[33*2] = this._encodeTupleByte(VERSION, VERSION);
-        macInput.set(messageBuffer, 33*2 + 1);
+        macInput[33 * 2] = this._encodeTupleByte(VERSION, VERSION);
+        macInput.set(messageProto, (33 * 2) + 1);
         // This is where we most likely fail if the session is not a match.
         // Don't misinterpret this as corruption.
-        crypto.verifyMAC(macInput, keys[1], mac, 8);
+        crypto.verifyMAC(macInput, keys[1], messageBuffer.slice(-8), 8);
         const plaintext = crypto.decrypt(keys[0], message.ciphertext, keys[2].slice(0, 16));
         delete session.pendingPreKey;
         return plaintext;
@@ -320,17 +313,16 @@ class SessionCipher {
         });
     }
 
-    async closeOpenSessionForDevice() {
+    async closeOpenSession() {
         return await this.queueJob(async () => {
             const record = await this.getRecord();
-            if (record)
-                const openSesion = record.getOpenSession();
+            if (record) {
+                const openSession = record.getOpenSession();
                 if (openSession) {
                     record.closeSession(openSession);
                     await this.storeRecord(record);
                 }
             }
-            await this.storage.storeSession(address, record);
         });
     }
 }

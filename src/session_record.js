@@ -223,7 +223,7 @@ class SessionRecord {
 
     getSession(key) {
         assertBuffer(key);
-        const session = this.sessions[baseKey.toString('base64')];
+        const session = this.sessions[key.toString('base64')];
         if (session && session.indexInfo.baseKeyType === BaseKeyType.OURS) {
             throw new Error("Tried to lookup a session using our basekey");
         }
@@ -231,7 +231,7 @@ class SessionRecord {
     }
 
     getOpenSession() {
-        for (const session of Object.values(sessions)) {
+        for (const session of Object.values(this.sessions)) {
             if (!this.isClosed(session)) {
                 return session;
             }
