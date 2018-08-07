@@ -138,7 +138,7 @@ class SessionCipher {
         if (!sessions.length) {
             throw new errors.SessionError("No sessions available");
         }   
-        const errors = [];
+        const errs = [];
         for (const session of sessions) {
             let plaintext; 
             try {
@@ -149,11 +149,11 @@ class SessionCipher {
                     plaintext
                 };
             } catch(e) {
-                errors.push(e);
+                errs.push(e);
             }
         }
         console.error("Failed to decrypt message with any known session...");
-        for (const e of errors) {
+        for (const e of errs) {
             console.error("Session error:" + e, e.stack);
         }
         throw new errors.SessionError("No matching sessions found for message");
@@ -294,7 +294,7 @@ class SessionCipher {
         let ratchet = session.currentRatchet;
         const sharedSecret = curve.calculateAgreement(remoteKey, ratchet.ephemeralKeyPair.privKey);
         const masterKey = crypto.deriveSecrets(sharedSecret, ratchet.rootKey,
-                                               Buffer.from("WhisperRatchet"));
+                                               Buffer.from("WhisperRatchet"), /*chunks*/ 2);
         const chainKey = sending ? ratchet.ephemeralKeyPair.pubKey : remoteKey;
         session.addChain(chainKey, {
             messageKeys: {},

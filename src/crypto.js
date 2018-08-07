@@ -50,10 +50,8 @@ function hash(data) {
 
 
 // Salts always end up being 32 bytes
-//function HKDF(input, salt, info) { // XXX
 function deriveSecrets(input, salt, info, chunks) {
     // Specific implementation of RFC 5869 that only returns the first 3 32-byte chunks
-    // TODO: We dont always need the third chunk, we might skip it
     assertBuffer(input);
     assertBuffer(salt);
     assertBuffer(info);
@@ -86,8 +84,6 @@ function verifyMAC(data, key, mac, length) {
         throw new Error("Bad MAC length");
     }
     if (!mac.equals(calculatedMac)) {
-        console.error(`Bad MAC: expected ${calculatedMac.toString('hex')} ` +
-                      `got ${mac.toString('hex')}`);
         throw new Error("Bad MAC");
     }
 }

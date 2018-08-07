@@ -18,6 +18,16 @@ class SessionEntry {
         this._chains = {};
     }
 
+    toString() {
+        const baseKey = this.indexInfo && this.indexInfo.baseKey &&
+            this.indexInfo.baseKey.toString('base64');
+        return `<SessionEntry [baseKey=${baseKey}]>`;
+    }
+
+    inspect() {
+        return this.toString();
+    }
+
     addChain(key, value) {
         assertBuffer(key);
         const id = key.toString('base64');
@@ -63,6 +73,8 @@ class SessionEntry {
                 baseKey: this.indexInfo.baseKey.toString('base64'),
                 baseKeyType: this.indexInfo.baseKeyType,
                 closed: this.indexInfo.closed,
+                used: this.indexInfo.used,
+                created: this.indexInfo.created,
                 remoteIdentityKey: this.indexInfo.remoteIdentityKey.toString('base64')
             },
             _chains: this._serialize_chains(this._chains)
@@ -90,6 +102,8 @@ class SessionEntry {
             baseKey: Buffer.from(data.indexInfo.baseKey, 'base64'),
             baseKeyType: data.indexInfo.baseKeyType,
             closed: data.indexInfo.closed,
+            used: data.indexInfo.used,
+            created: data.indexInfo.created,
             remoteIdentityKey: Buffer.from(data.indexInfo.remoteIdentityKey, 'base64')
         };
         obj._chains = this._deserialize_chains(data._chains);
@@ -287,7 +301,7 @@ class SessionRecord {
                 console.info("Removing old closed session:", oldestSession);
                 delete this.sessions[oldestKey];
             } else {
-                throw new Error('Corrupt session map');
+                throw new Error('Corrupt sessions object');
             }
         }
     }
@@ -297,7 +311,6 @@ class SessionRecord {
             delete this.sessions[key];
         }
     }
-
 }
 
 module.exports = SessionRecord;
